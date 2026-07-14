@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* ─── Rumart design tokens — minimal luxury: white, black, light gray ───── */
+@theme {
+  --color-ink-950: #0a0a0b;
+  --color-ink-900: #131316;
+  --color-ink-800: #1d1d21;
+  --color-ink-700: #2a2a30;
+  --color-ink-500: #6b6b74;
+  --color-ink-400: #8a8a93;
+  --color-ink-300: #b8b8bf;
+
+  --color-paper: #ffffff;
+  --color-mist-50: #fafafa;
+  --color-mist-100: #f4f4f5;
+  --color-mist-200: #e9e9ec;
+  --color-mist-300: #dcdce0;
+
+  /* Very small blue accent — used sparingly */
+  --color-accent-500: #2563eb;
+  --color-accent-600: #1d4ed8;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-xl2: 1.25rem;
+
+  --animate-marquee: marquee 30s linear infinite;
+  --animate-float-slow: float-slow 9s ease-in-out infinite;
+
+  @keyframes float-slow {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes shimmer {
+    0% { background-position: -450px 0; }
+    100% { background-position: 450px 0; }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  border-color: var(--color-mist-200);
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
+}
+
+/* Thin, quiet scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-mist-300) transparent;
+}
+
+/* ─── Reusable utilities ────────────────────────────────────────────────── */
+@utility card {
+  background: var(--color-paper);
+  border: 1px solid var(--color-mist-200);
+  border-radius: var(--radius-xl2);
+  box-shadow: 0 1px 2px rgba(10, 10, 11, 0.04), 0 8px 24px -16px rgba(10, 10, 11, 0.12);
+}
+
+@utility hairline {
+  border: 1px solid var(--color-mist-200);
+}
+
+@utility skeleton {
+  background: linear-gradient(90deg, var(--color-mist-100) 25%, var(--color-mist-200) 50%, var(--color-mist-100) 75%);
+  background-size: 900px 100%;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: 0.75rem;
+}
+
+/* Subtle dotted background texture for section depth */
+@utility dot-grid {
+  background-image: radial-gradient(var(--color-mist-200) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-paper), 0 0 0 4px var(--color-accent-500);
+}
+
+input.field,
+textarea.field,
+select.field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-mist-300);
+  background: var(--color-paper);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9rem;
+  color: var(--color-ink-900);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input.field:focus,
+textarea.field:focus,
+select.field:focus {
+  border-color: var(--color-accent-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

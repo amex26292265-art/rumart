@@ -1,0 +1,98 @@
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import "dotenv/config";
+
+const prisma = new PrismaClient();
+
+/**
+ * Seeds ONLY structural data — admin user, supplier, categories, a default
+ * pricing rule, and disabled sample sync rules. No fake products, reviews, or
+ * stats: the catalog stays empty until a real sync imports real listings.
+ */
+async function main() {
+  const email = (process.env.ADMIN_EMAIL ?? "admin@rumart.xyz").toLowerCase();
+  const password = process.env.ADMIN_PASSWORD ?? "rumart-admin-2026";
+  await prisma.user.upsert({
+    where: { email },
+    update: { role: "admin" },
+    create: { email, passwordHash: await bcrypt.hash(password, 10), name: "Admin", role: "admin" },
+  });
+
+  await prisma.supplier.upsert({
+    where: { slug: "lzt" },
+    update: {},
+    create: { slug: "lzt", name: "LZT Market" },
+  });
+
+  const categories = [
+    { slug: "steam", name: "Steam", icon: "Gamepad2", accent: "#1b2838", supplierCategory: "steam", featured: true, order: 0, description: "Steam accounts with games (CS2, Rust, GTA V, PUBG), wallet balance and inventory." },
+    { slug: "fortnite", name: "Fortnite", icon: "Swords", accent: "#7c3aed", supplierCategory: "fortnite", featured: true, order: 1, description: "Fortnite accounts with rare skins, V-Bucks and battle pass progress." },
+    { slug: "valorant", name: "Valorant", icon: "Crosshair", accent: "#ff4655", supplierCategory: "riot", featured: true, order: 2, description: "Riot / Valorant accounts with agents, skins and ranked history." },
+    { slug: "ea", name: "EA / FIFA", icon: "Trophy", accent: "#0a1f3c", supplierCategory: "ea", featured: true, order: 3, description: "EA App accounts — EA FC / FIFA, Apex Legends, Battlefield and more." },
+    { slug: "gta", name: "GTA V", icon: "Car", accent: "#43a047", supplierCategory: "socialclub", featured: true, order: 4, description: "Rockstar / Social Club accounts with GTA Online cash and unlocks." },
+    { slug: "discord", name: "Discord", icon: "MessageCircle", accent: "#5865f2", supplierCategory: "discord", featured: true, order: 5, description: "Discord accounts, aged and verified." },
+    { slug: "telegram", name: "Telegram", icon: "Send", accent: "#229ed9", supplierCategory: "telegram", featured: false, order: 6, description: "Telegram accounts across regions." },
+    { slug: "genshin", name: "Genshin Impact", icon: "Sparkles", accent: "#5b8cff", supplierCategory: "mihoyo", featured: false, order: 7, description: "miHoYo accounts — Genshin Impact & Honkai with characters and wishes." },
+    { slug: "epicgames", name: "Epic Games", icon: "Gamepad", accent: "#2f2f2f", supplierCategory: "epicgames", featured: false, order: 8, description: "Epic Games accounts with full game libraries." },
+    { slug: "roblox", name: "Roblox", icon: "Blocks", accent: "#e2231a", supplierCategory: "roblox", featured: false, order: 9, description: "Roblox accounts with Robux and limiteds." },
+    { slug: "minecraft", name: "Minecraft", icon: "Box", accent: "#3ab54a", supplierCategory: "minecraft", featured: false, order: 10, description: "Minecraft Java & Bedrock accounts." },
+    { slug: "supercell", name: "Supercell", icon: "Castle", accent: "#f9a825", supplierCategory: "supercell", featured: false, order: 11, description: "Clash of Clans, Brawl Stars and Clash Royale accounts." },
+    { slug: "warface", name: "Warface", icon: "Crosshair", accent: "#e65100", supplierCategory: "warface", featured: false, order: 12, description: "Warface accounts with rank, weapons and inventory." },
+    { slug: "battlenet", name: "Battle.net", icon: "Gamepad", accent: "#00aeff", supplierCategory: "battlenet", featured: false, order: 13, description: "Blizzard Battle.net accounts — Overwatch, Diablo, CoD." },
+    { slug: "uplay", name: "Ubisoft", icon: "Gamepad", accent: "#0070ff", supplierCategory: "uplay", featured: false, order: 14, description: "Ubisoft Connect accounts with game libraries." },
+    { slug: "vpn", name: "VPN", icon: "Shield", accent: "#334155", supplierCategory: "vpn", featured: false, order: 15, description: "Premium VPN subscriptions." },
+    { slug: "instagram", name: "Instagram", icon: "AtSign", accent: "#e1306c", supplierCategory: "instagram", featured: false, order: 16, description: "Instagram accounts, aged and with followers." },
+    { slug: "tiktok", name: "TikTok", icon: "Music", accent: "#111827", supplierCategory: "tiktok", featured: false, order: 17, description: "TikTok accounts across regions." },
+    { slug: "giftcards", name: "Gift Cards", icon: "Gift", accent: "#16a34a", supplierCategory: "gifts", featured: false, order: 18, description: "Digital gift cards and top-ups." },
+  ];
+
+  const idBySlug: Record<string, string> = {};
+  for (const c of categories) {
+    const row = await prisma.category.upsert({ where: { slug: c.slug }, update: c, create: c });
+    idBySlug[c.slug] = row.id;
+  }
+
+  // Default global pricing rule: +25%, minimum $1 margin, rounded up to .99.
+  const existingGlobal = await prisma.pricingRule.findFirst({ where: { categoryId: null } });
+  if (!existingGlobal) {
+    await prisma.pricingRule.create({
+      data: { name: "Global markup", type: "percent", value: 25, minMargin: 1, rounding: "up_99", priority: 0 },
+    });
+  }
+
+  // Sample sync rules (disabled) so the admin has editable examples ready.
+  for (const slug of ["steam", "fortnite", "discord"]) {
+    const name = `${slug} — auto delivery`;
+    const exists = await prisma.syncRule.findFirst({ where: { name } });
+    if (!exists) {
+      await prisma.syncRule.create({
+        data: {
+          name,
+          enabled: false,
+          categoryId: idBySlug[slug],
+          supplierCategory: slug === "fortnite" ? "fortnite" : slug === "discord" ? "discord" : "steam",
+          autoDeliveryOnly: true,
+          maxSupplierPrice: 50,
+          minSellerRating: 0,
+          maxImport: 30,
+        },
+      });
+    }
+  }
+
+  await prisma.setting.upsert({
+    where: { key: "currency" },
+    update: {},
+    create: { key: "currency", value: process.env.SITE_CURRENCY ?? "USD" },
+  });
+
+  console.log("Seed complete ✔ (structure only — catalog is intentionally empty)");
+  console.log(`Admin: ${email} / ${password}`);
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => prisma.$disconnect());

@@ -1,0 +1,283 @@
+// Rumart — reseller marketplace data model.
+// SQLite for local dev; swap `provider` to "postgresql" and DATABASE_URL for Vercel.
+// SQLite has no native enums, so status/type fields are strings with documented values.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // PostgreSQL for Vercel (serverless can't use SQLite). Use one Neon/Vercel
+  // Postgres for both local dev and production via the same DATABASE_URL.
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth / customers ──────────────────────────────────────────────────────
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  role          String   @default("customer") // customer | admin
+  walletBalance Float    @default(0) // store credit, in site currency
+  twoFactorSecret String? // reserved for 2FA (TOTP)
+  twoFactorEnabled Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders        Order[]
+  reviews       Review[]
+  wishlist      WishlistItem[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+  deposits      Deposit[]
+}
+
+// Wallet top-up via a crypto payment gateway (Cryptomus). Credited to
+// User.walletBalance once the gateway confirms the payment on-chain (webhook).
+model Deposit {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Float // requested top-up amount, in site currency
+  currency   String   @default("USD")
+  provider   String   @default("cryptomus")
+  providerId String? // gateway invoice uuid
+  status     String   @default("pending") // pending | paid | failed | cancelled
+  credited   Boolean  @default(false) // guards against double-crediting
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Supplier abstraction ──────────────────────────────────────────────────
+// Never hardcode a single supplier. Each product references its supplier.
+model Supplier {
+  id        String    @id @default(cuid())
+  slug      String    @unique // lzt | manual | ...
+  name      String
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  products  Product[]
+  syncRuns  SyncRun[]
+}
+
+// ─── Catalog ───────────────────────────────────────────────────────────────
+model Category {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  name             String
+  description      String?
+  icon             String? // lucide icon name or asset path
+  accent           String   @default("#2563eb")
+  order            Int      @default(0)
+  featured         Boolean  @default(false)
+  // Maps this storefront category to a supplier-side category (e.g. LZT "steam").
+  supplierCategory String?
+  createdAt        DateTime @default(now())
+
+  products    Product[]
+  syncRules   SyncRule[]
+  pricingRules PricingRule[]
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  title          String
+  description    String?
+  // Money is stored in the smallest sensible unit as Float; site currency in Setting.
+  price          Float // customer-facing sell price (after pricing engine)
+  cost           Float // supplier price we paid / would pay
+  currency       String   @default("USD")
+  status         String   @default("active") // active | hidden | sold | unavailable
+  deliveryType   String   @default("auto") // auto | manual
+  stock          Int      @default(1)
+  images         Json? // string[]
+  attributes     Json? // full parsed supplier info (stats, games, sections…)
+  supplierItemId String? // id on the supplier side (e.g. LZT item id)
+
+  // Denormalized, indexable fields for fast server-side filtering.
+  country      String? // normalized account country name
+  emailNative  Boolean @default(false) // native email access included
+  vac          Boolean @default(false) // has a VAC / game ban
+  level        Int? // account/profile level (category dependent)
+  tags         Json? // string[] short feature tags shown on the card
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  orderItems OrderItem[]
+  reviews    Review[]
+  wishlist   WishlistItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([supplierId, supplierItemId])
+  @@index([categoryId, status, price])
+  @@index([status, country])
+  @@index([status, createdAt])
+}
+
+// ─── Sync configuration & runs ─────────────────────────────────────────────
+model SyncRule {
+  id               String   @id @default(cuid())
+  name             String
+  enabled          Boolean  @default(true)
+  categoryId       String
+  category         Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  supplierCategory String // supplier-side category slug (e.g. "steam")
+  // Filters (all optional). Stored explicitly for admin editing.
+  minSellerRating  Float?
+  maxSupplierPrice Float?
+  minSupplierPrice Float?
+  country          String?
+  platform         String?
+  deliveryType     String? // auto | manual
+  autoDeliveryOnly Boolean  @default(true)
+  keywords         Json? // string[]
+  whitelist        Json? // string[]
+  blacklist        Json? // string[]
+  maxImport        Int      @default(50)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model SyncRun {
+  id         String    @id @default(cuid())
+  supplierId String
+  supplier   Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  status     String    @default("running") // running | success | failed
+  imported   Int       @default(0)
+  updated    Int       @default(0)
+  removed    Int       @default(0)
+  message    String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+}
+
+// ─── Pricing engine ────────────────────────────────────────────────────────
+model PricingRule {
+  id         String    @id @default(cuid())
+  name       String
+  // Global rule when categoryId is null; category rules override the global one.
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  type       String    @default("percent") // percent | flat
+  value      Float     @default(25) // 25 => +25% or +$25 depending on type
+  minMargin  Float? // never sell below cost + minMargin
+  maxMargin  Float? // cap the added margin
+  rounding   String    @default("none") // none | up_99 (….99) | up_int
+  enabled    Boolean   @default(true)
+  priority   Int       @default(0) // higher wins among category rules
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ─── Orders & delivery ─────────────────────────────────────────────────────
+model Order {
+  id            String   @id @default(cuid())
+  reference     String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  status        String   @default("pending") // pending | paid | delivering | completed | failed | cancelled | refunded
+  paymentMethod String   @default("wallet") // wallet | stripe | crypto
+  currency      String   @default("USD")
+  total         Float    @default(0)
+  cost          Float    @default(0)
+  profit        Float    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items      OrderItem[]
+  credential Credential[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  title     String
+  price     Float
+  cost      Float
+  qty       Int     @default(1)
+}
+
+// Encrypted delivered credentials (AES-256-GCM). Never store secrets in plaintext.
+model Credential {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productTitle   String
+  supplierItemId String?
+  ciphertext     String // base64 iv:tag:data
+  createdAt      DateTime @default(now())
+}
+
+// ─── Community & engagement (real data only) ───────────────────────────────
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Coupon {
+  id         String    @id @default(cuid())
+  code       String    @unique
+  type       String    @default("percent") // percent | flat
+  value      Float
+  maxUses    Int?
+  uses       Int       @default(0)
+  expiresAt  DateTime?
+  enabled    Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+}
+
+// Key/value site settings (currency, brand text, feature flags…).
+model Setting {
+  key   String @id
+  value String
+}
