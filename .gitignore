@@ -44,3 +44,9 @@ prisma/dev.db
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# single app — no pnpm workspace file (breaks Cloudflare pnpm)
+pnpm-workspace.yaml
+.open-next
+.wrangler
+.dev.vars
