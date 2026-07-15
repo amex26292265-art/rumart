@@ -129,18 +129,24 @@ function humanizeKey(key: string): string {
     .join(" ");
 }
 
+// Keys that read as yes/no even though the API returns 1/0 (or -1 for "none").
+const YESNO_KEY = /(2fa|mfa|premium|verified|_ready|_linkable|_active|_block|native|has_|is_|can_)/;
+
 function formatDynamicValue(key: string, value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (typeof value === "boolean") return value ? "Yes" : BOOLEAN_KEY.test(key) ? "No" : null;
+  if (typeof value === "boolean") return value ? "Yes" : YESNO_KEY.test(key) ? "No" : null;
   if (typeof value === "number") {
     if (DATE_KEY.test(key) && value > 946_684_800 && value < 4_102_444_800) return fmtDate(value);
-    if (value === 0) return BOOLEAN_KEY.test(key) ? "No" : null;
-    if (value === 1 && BOOLEAN_KEY.test(key)) return "Yes";
+    if (YESNO_KEY.test(key)) return value > 0 ? "Yes" : "No";
+    if (value < 0) return null; // -1 etc. are "none"/unknown sentinels
+    if (value === 0) return null;
     return Math.abs(value) >= 10_000 ? value.toLocaleString("en-US") : String(value);
   }
   if (typeof value === "string") {
     const t = value.trim();
-    if (!t || t === "0") return null;
+    // Drop empties and stringified empty JSON collections ("[]", "{}", "null").
+    if (!t || t === "0" || t === "[]" || t === "{}" || t === "null" || t === "-1") return null;
+    if (YESNO_KEY.test(key) && /^(0|1)$/.test(t)) return t === "1" ? "Yes" : "No";
     if (DATE_KEY.test(key)) {
       const asDate = fmtDate(t);
       if (asDate) return asDate;
@@ -340,6 +346,15 @@ export function buildAccountInfo(raw: LztRawItem): AccountInfo {
   if (balance) bits.push(`${balance} balance`);
   if (emailNative) bits.push("native email");
   if (warranty) bits.push(`${warranty} warranty`);
+  // Non-steam categories: fall back to the first few dynamic stats so every
+  // product still gets a readable one-line summary.
+  if (bits.length < 2) {
+    for (const row of dynamicRows) {
+      if (bits.length >= 3) break;
+      if (/^(condition|locale|username length)/i.test(row.label)) continue;
+      bits.push(`${row.label.toLowerCase()} ${row.value}`);
+    }
+  }
   const summary = bits.length ? bits.join(" · ") : null;
 
   return {
