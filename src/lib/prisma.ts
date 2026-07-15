@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaNeon } from "@prisma/adapter-neon";
 
 /**
  * Prisma client with dual runtime support:
@@ -6,9 +7,9 @@ import { PrismaClient } from "@prisma/client";
  *  - Cloudflare Workers: the Neon serverless driver adapter, because Workers
  *    can't run Prisma's native binary engine.
  *
- * Detected via `navigator.userAgent` which Cloudflare Workers set to
- * "Cloudflare-Workers". The adapter path is loaded lazily so Node builds don't
- * pull the Workers-only driver.
+ * Detected via `navigator.userAgent`, which Cloudflare Workers set to
+ * "Cloudflare-Workers". Uses a static import (not require) so it works in the
+ * Worker's ESM runtime.
  */
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -18,10 +19,7 @@ const onCloudflare =
 
 function createPrisma(): PrismaClient {
   if (onCloudflare) {
-    // Lazy requires so bundlers don't include these on the Node path.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { PrismaNeon } = require("@prisma/adapter-neon");
-    const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL });
+    const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL ?? "" });
     return new PrismaClient({ adapter });
   }
   return new PrismaClient();
