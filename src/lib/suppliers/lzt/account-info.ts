@@ -205,11 +205,24 @@ function extractGames(raw: LztRawItem): string[] {
 }
 
 export function buildAccountInfo(raw: LztRawItem): AccountInfo {
+  // Country/region — check the known per-category fields first, then fall back
+  // to any "<prefix>_country" the API exposes (telegram_country, instagram_…),
+  // so the country filter and variety buckets work for every category.
+  const genericCountry = (): string | null => {
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (/_country$/.test(key) || key === "country") {
+        const v = strOf(value);
+        if (v) return v;
+      }
+    }
+    return null;
+  };
   const country =
     strOf(r(raw, "steam_country")) ??
     strOf(r(raw, "account_country")) ??
     strOf(r(raw, "riot_valorant_region")) ??
-    null;
+    strOf(r(raw, "telegram_country")) ??
+    genericCountry();
   const origin = strOf(r(raw, "itemOriginPhrase")) ?? strOf(r(raw, "item_origin")) ?? null;
   const registerDate = fmtDate(r(raw, "steam_register_date")) ?? fmtDate(r(raw, "register_date"));
   const lastActivity =
