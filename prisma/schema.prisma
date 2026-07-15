@@ -3,9 +3,11 @@
 // SQLite has no native enums, so status/type fields are strings with documented values.
 
 generator client {
-  // Driver adapters (stable in Prisma 6) let Prisma run on Cloudflare Workers
-  // via the Neon adapter — Workers can't execute the default binary engine.
   provider = "prisma-client-js"
+  // queryCompiler + driverAdapters = an engine-less client (pure TypeScript, no
+  // binary/WASM query engine, no filesystem access). Required to run on
+  // Cloudflare Workers, where the binary engine's fs.readdir throws.
+  previewFeatures = ["queryCompiler", "driverAdapters"]
 }
 
 datasource db {
