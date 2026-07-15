@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { verifyPassword, needsRehash, hashPassword } from "@/lib/password";
 
 /**
  * Auth.js v5, JWT sessions, credentials provider. Roles are carried in the JWT
@@ -20,7 +20,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!email || !password) return null;
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return null;
-        if (!(await bcrypt.compare(password, user.passwordHash))) return null;
+        if (!(await verifyPassword(password, user.passwordHash))) return null;
+        // Transparently upgrade legacy bcrypt hashes to the fast scheme.
+        if (needsRehash(user.passwordHash)) {
+          await prisma.user
+            .update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } })
+            .catch(() => undefined);
+        }
         return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
     }),

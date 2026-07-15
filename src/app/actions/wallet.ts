@@ -41,6 +41,14 @@ export async function createDeposit(amount: number): Promise<DepositResult> {
     return { ok: true, url: invoice.url };
   } catch (err) {
     await prisma.deposit.update({ where: { id: deposit.id }, data: { status: "failed" } });
-    return { ok: false, error: err instanceof Error ? err.message : "Could not start payment." };
+    const raw = err instanceof Error ? err.message : "Could not start payment.";
+    // Map gateway responses to messages a customer can act on.
+    const friendly = /not active/i.test(raw)
+      ? "Crypto payments are being activated (the payment provider is reviewing our account). Please try again a little later."
+      : /merchant/i.test(raw)
+        ? "Payment gateway configuration issue — our team has been notified. Please try again later."
+        : raw;
+    console.error(`[cryptomus] deposit ${deposit.id} failed: ${raw}`);
+    return { ok: false, error: friendly };
   }
 }

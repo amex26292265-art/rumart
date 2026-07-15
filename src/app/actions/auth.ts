@@ -1,9 +1,9 @@
 "use server";
 
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { signOut } from "@/auth";
+import { hashPassword } from "@/lib/password";
 
 export async function logoutAction() {
   await signOut({ redirectTo: "/" });
@@ -27,7 +27,7 @@ export async function registerAction(input: unknown): Promise<{ ok: true } | { o
     data: {
       email,
       name: parsed.data.name?.trim() || null,
-      passwordHash: await bcrypt.hash(parsed.data.password, 10),
+      passwordHash: await hashPassword(parsed.data.password),
       role: "customer",
     },
   });

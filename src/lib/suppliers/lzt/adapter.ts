@@ -201,4 +201,8 @@ export class LztSupplier implements Supplier {
       raw: res,
     };
   }
+
+  async getBalance(): Promise<number | null> {
+    return lztMarket.balanceUsd();
+  }
 }

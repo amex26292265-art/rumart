@@ -53,4 +53,10 @@ export interface Supplier {
   getItem(supplierItemId: string): Promise<SupplierListing | null>;
   /** Purchase an item and return credentials. Throws on failure. */
   purchase(supplierItemId: string, expectedCost: number): Promise<SupplierPurchaseResult>;
+  /**
+   * Spendable balance on the supplier in site currency (USD), or null when
+   * unknown. Used to skip doomed purchase attempts and fall back to manual
+   * fulfillment instead.
+   */
+  getBalance?(): Promise<number | null>;
 }

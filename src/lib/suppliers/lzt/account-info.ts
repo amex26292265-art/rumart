@@ -57,6 +57,129 @@ function fmtDate(v: unknown): string | null {
   return new Date(unix * 1000).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+// ─── Dynamic field walker ────────────────────────────────────────────────────
+// LZT prefixes category data (`discord_*`, `riot_*`, `fortnite_*`…). Instead of
+// hardcoding fields per category, walk every prefixed scalar in the raw item
+// and render it with a humanized label. New API fields appear automatically.
+
+const FIELD_PREFIXES = [
+  "steam",
+  "fortnite",
+  "riot",
+  "valorant",
+  "lol",
+  "epicgames",
+  "epic",
+  "discord",
+  "telegram",
+  "supercell",
+  "ea",
+  "origin",
+  "minecraft",
+  "roblox",
+  "tiktok",
+  "instagram",
+  "uplay",
+  "battlenet",
+  "mihoyo",
+  "socialclub",
+  "warface",
+  "vpn",
+  "gifts",
+  "account",
+];
+
+// Housekeeping/commercial keys that are never useful to a buyer.
+const SKIP_KEY =
+  /^(item_id|item_state|category_id|is_sticky|published_date|update_stat_date|refreshed_date|edit_date|pending_deletion_date|view_count|price|price_currency|rub_price|discount|title|title_en|description|description_en|auto_bump_period|allow_ask_discount|resale_item_origin|extended_guarantee|guarantee_duration|item_origin|email_type|email_provider|item_domain|nsb.*)$/;
+// Anything that could leak credentials is reduced to a Yes/No presence flag.
+const SENSITIVE = /password|login|token|cookie|secret|jwt|session|phone|email/i;
+// Values under these keys are unix timestamps.
+const DATE_KEY = /(date|activity|last_seen|expires|birthday|created|last_trans)/;
+// Strong boolean keys render "No" too; other falsy values are just omitted.
+const BOOLEAN_KEY = /^(has_|is_|can_)|(_enabled|_linkable|_ready|_active|_banned|_premium|_verified|_block)$/;
+
+const ACRONYMS = new Set([
+  "vp",
+  "rp",
+  "id",
+  "dc",
+  "nft",
+  "vac",
+  "cs2",
+  "tf2",
+  "rl",
+  "psn",
+  "sda",
+  "mmr",
+  "kd",
+  "url",
+  "mfa",
+  "xp",
+  "gta",
+]);
+
+function humanizeKey(key: string): string {
+  const words = key.split("_").filter(Boolean);
+  return words
+    .map((w, i) => {
+      if (ACRONYMS.has(w)) return w.toUpperCase();
+      return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    })
+    .join(" ");
+}
+
+function formatDynamicValue(key: string, value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "Yes" : BOOLEAN_KEY.test(key) ? "No" : null;
+  if (typeof value === "number") {
+    if (DATE_KEY.test(key) && value > 946_684_800 && value < 4_102_444_800) return fmtDate(value);
+    if (value === 0) return BOOLEAN_KEY.test(key) ? "No" : null;
+    if (value === 1 && BOOLEAN_KEY.test(key)) return "Yes";
+    return Math.abs(value) >= 10_000 ? value.toLocaleString("en-US") : String(value);
+  }
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (!t || t === "0") return null;
+    if (DATE_KEY.test(key)) {
+      const asDate = fmtDate(t);
+      if (asDate) return asDate;
+    }
+    return t.length > 120 ? `${t.slice(0, 117)}…` : t;
+  }
+  if (Array.isArray(value)) {
+    const strings = value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+    if (strings.length) return strings.slice(0, 15).join(", ");
+    return null; // arrays of objects usually have a *_count sibling
+  }
+  return null; // nested objects are handled by curated extractors (games, images)
+}
+
+/** Every useful prefixed field in the raw item, as ready-to-render rows. */
+function buildDynamicRows(raw: LztRawItem): AccountStat[] {
+  const rows: AccountStat[] = [];
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (rows.length >= 60) break;
+    if (SKIP_KEY.test(key)) continue;
+    const m = /^([a-z0-9]+)_(.+)$/.exec(key);
+    if (!m || !FIELD_PREFIXES.includes(m[1])) continue;
+    const rest = m[2];
+    if (rest.endsWith("_id") || rest === "id") continue;
+
+    if (SENSITIVE.test(rest)) {
+      // Presence only — never render values that look credential-adjacent.
+      const present =
+        value === true || value === 1 || (typeof value === "string" && value.trim().length > 0 && value !== "0");
+      if (present) rows.push({ label: humanizeKey(rest), value: "Included" });
+      continue;
+    }
+
+    const formatted = formatDynamicValue(rest, value);
+    if (formatted !== null) rows.push({ label: humanizeKey(rest), value: formatted });
+  }
+  return rows;
+}
+
 function extractGames(raw: LztRawItem): string[] {
   const fg = r(raw, "steam_full_games");
   if (!fg || typeof fg !== "object") return [];
@@ -169,10 +292,34 @@ export function buildAccountInfo(raw: LztRawItem): AccountInfo {
   add(rowsActivity, "Played (2 weeks)", played2w);
   add(rowsActivity, "Last transaction", lastTransaction);
 
+  // Everything else the API returned for this category, minus rows the curated
+  // sections already cover — so no useful field is ever hidden.
+  const curatedLabels = new Set(
+    [...rowsAccount, ...rowsEmail, ...rowsActivity, ...stats].map((row) => row.label.toLowerCase()),
+  );
+  const curatedValues = new Set([...rowsAccount, ...rowsEmail, ...rowsActivity].map((row) => row.value));
+  const dynamicRows = buildDynamicRows(raw).filter(
+    (row) => !curatedLabels.has(row.label.toLowerCase()) && !(curatedValues.has(row.value) && row.value.length > 8),
+  );
+
+  // Non-steam categories have few curated stats — promote dynamic rows so
+  // cards and summaries always have real data to show.
+  if (stats.length < 4) {
+    const statLabels = new Set(stats.map((row) => row.label.toLowerCase()));
+    for (const row of dynamicRows) {
+      if (stats.length >= 8) break;
+      if (!statLabels.has(row.label.toLowerCase())) {
+        stats.push(row);
+        statLabels.add(row.label.toLowerCase());
+      }
+    }
+  }
+
   const sections: AccountSection[] = [
     { title: "Account details", rows: rowsAccount },
     { title: "Email & recovery", rows: rowsEmail },
     { title: "Activity", rows: rowsActivity },
+    { title: "Full account data", rows: dynamicRows },
   ].filter((sec) => sec.rows.length > 0);
 
   // Short feature chips for the card.

@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client/edge";
-import bcrypt from "bcryptjs";
 import "dotenv/config";
+import { hashPassword } from "../src/lib/password";
 
 // Edge client: the app's client is generated with --no-engine, so seeding also
 // goes through Prisma Accelerate (DATABASE_URL = prisma:// URL).
@@ -17,7 +17,7 @@ async function main() {
   await prisma.user.upsert({
     where: { email },
     update: { role: "admin" },
-    create: { email, passwordHash: await bcrypt.hash(password, 10), name: "Admin", role: "admin" },
+    create: { email, passwordHash: await hashPassword(password), name: "Admin", role: "admin" },
   });
 
   await prisma.supplier.upsert({

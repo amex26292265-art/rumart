@@ -157,6 +157,18 @@ export class LztMarketService {
   async me(): Promise<unknown> {
     return this.request<unknown>(`/market/me`);
   }
+
+  /**
+   * Spendable balance in USD. LZT reports raw `balance` in its own base
+   * currency (RUB) but also exposes `convertedBalance` in the account's
+   * display currency — USD for our token. Returns null when unavailable.
+   */
+  async balanceUsd(): Promise<number | null> {
+    const res = (await this.me()) as { user?: Record<string, unknown> } | Record<string, unknown>;
+    const u = ((res as { user?: Record<string, unknown> }).user ?? res) as Record<string, unknown>;
+    if (typeof u.convertedBalance === "number" && u.currency === "usd") return u.convertedBalance;
+    return null;
+  }
 }
 
 function safeJson(text: string): unknown {

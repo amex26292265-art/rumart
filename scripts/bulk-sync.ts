@@ -20,6 +20,10 @@ import type { SupplierListing } from "../src/lib/suppliers/types";
  *    re-balances buckets.
  */
 
+// FORCE_REFRESH=1 rewrites attributes/images/title on every re-encountered
+// product (use after changing the account-info builder).
+const FORCE = process.env.FORCE_REFRESH === "1";
+
 const MAX_COST = 240; // supplier cost cap → sell ≈ ≤ $289 < $300
 const MAX_SELL = 300;
 const GAME_CAP = 30; // max listings per individual game
@@ -328,13 +332,28 @@ async function main() {
             const existing = known.get(listing.supplierItemId);
             if (existing) {
               const needsImages = noImages.has(listing.supplierItemId) && !!listing.images?.length;
-              if (existing.status === "active" && (existing.cost !== listing.cost || needsImages)) {
+              if (existing.status === "active" && (FORCE || existing.cost !== listing.cost || needsImages)) {
+                const idx = indexable(listing);
                 await prisma.product.update({
                   where: { id: existing.id },
                   data: {
                     price: applyPricing(listing.cost, pricing),
                     cost: listing.cost,
-                    ...(needsImages ? { images: listing.images as Prisma.InputJsonValue } : {}),
+                    ...(needsImages || (FORCE && listing.images?.length)
+                      ? { images: listing.images as Prisma.InputJsonValue }
+                      : {}),
+                    ...(FORCE
+                      ? {
+                          title: listing.title,
+                          description: listing.description,
+                          attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+                          country: idx.country,
+                          emailNative: idx.emailNative,
+                          vac: idx.vac,
+                          level: idx.level,
+                          tags: idx.tags,
+                        }
+                      : {}),
                   },
                 });
                 if (needsImages) noImages.delete(listing.supplierItemId);

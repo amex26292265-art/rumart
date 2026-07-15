@@ -54,7 +54,9 @@ export async function purchaseProduct(userId: string, productId: string): Promis
   const refund = () =>
     prisma.user.update({ where: { id: userId }, data: { walletBalance: { increment: product.price } } });
 
-  const createPending = async (): Promise<string> => {
+  // Paid order awaiting manual delivery: keep the customer's payment, notify
+  // them (with the Telegram contact) and alert every admin.
+  const createPending = async (reason: string): Promise<string> => {
     const reference = orderReference();
     await prisma.order.create({
       data: {
@@ -69,6 +71,27 @@ export async function purchaseProduct(userId: string, productId: string): Promis
         items: { create: { productId: product.id, title: product.title, price: product.price, cost: product.cost } },
       },
     });
+    try {
+      const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
+      await prisma.notification.createMany({
+        data: [
+          {
+            userId,
+            title: `Order ${reference} — pending manual delivery`,
+            body: "Your payment is confirmed. Contact us on Telegram with your order reference and we’ll deliver it right away.",
+          },
+          ...admins
+            .filter((a) => a.id !== userId)
+            .map((a) => ({
+              userId: a.id,
+              title: `⚠ Manual fulfillment needed: ${reference}`,
+              body: `${product.title} — ${reason}. Deliver manually and mark the order completed.`,
+            })),
+        ],
+      });
+    } catch (err) {
+      console.error(`[orders] failed to create notifications for ${reference}:`, err);
+    }
     return reference;
   };
 
@@ -77,12 +100,27 @@ export async function purchaseProduct(userId: string, productId: string): Promis
   // Can't attempt automated delivery → keep funds reserved as a paid pending
   // order and route to Telegram for manual delivery.
   if (!supplier || !supplier.isConfigured() || !product.supplierItemId) {
-    const reference = await createPending();
+    const reference = await createPending("supplier not configured for automated delivery");
     return {
       ok: false,
       reference,
       contact: true,
       error: "Payment received. Automated delivery is finalizing — contact us on Telegram with your reference to receive it.",
+    };
+  }
+
+  // Never fire a supplier purchase we can't afford: if our supplier wallet is
+  // short, keep the customer's paid order as pending-manual instead.
+  const supplierBalance = await supplier.getBalance?.().catch(() => null);
+  if (supplierBalance != null && supplierBalance < product.cost) {
+    const reference = await createPending(
+      `insufficient LZT balance ($${supplierBalance.toFixed(2)} < $${product.cost.toFixed(2)}) — top up LZT wallet`,
+    );
+    return {
+      ok: false,
+      reference,
+      contact: true,
+      error: "Payment received. We’ll deliver your account shortly — contact us on Telegram with your reference for instant manual delivery.",
     };
   }
 
@@ -99,10 +137,12 @@ export async function purchaseProduct(userId: string, productId: string): Promis
   try {
     const result = await supplier.purchase(product.supplierItemId, product.cost);
     credentials = result.credentials;
-  } catch {
+  } catch (err) {
     // Auto-payment couldn't complete (our supplier balance, upstream error…).
     // Keep the customer's payment (order stays paid/pending) and route to Telegram.
-    const reference = await createPending();
+    const reference = await createPending(
+      `supplier purchase failed: ${err instanceof Error ? err.message : "unknown error"}`,
+    );
     return {
       ok: false,
       reference,

@@ -29,10 +29,27 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const warranty = typeof a.warranty === "string" ? a.warranty : null;
   const emailNative = a.emailNative === true;
   const stats = (Array.isArray(a.stats) ? a.stats : []) as { label: string; value: string }[];
-  // Show up to two compact key stats (e.g. register date, total games).
-  const keyStats = stats
-    .filter((s) => ["Register date", "Total games", "Balance", "Account level"].includes(s.label))
-    .slice(0, 2);
+  // Show up to two compact key stats, preferring the most sales-relevant ones.
+  const PRIORITY = [
+    "Balance",
+    "Inventory value",
+    "Skin count",
+    "Skins",
+    "Account level",
+    "Level",
+    "Premium",
+    "Nitro",
+    "Followers count",
+    "Channels count",
+    "Register date",
+    "Total games",
+    "Country",
+    "Region",
+  ];
+  const prioritized = PRIORITY.map((label) => stats.find((s) => s.label === label)).filter(
+    (s): s is { label: string; value: string } => Boolean(s),
+  );
+  const keyStats = (prioritized.length ? prioritized : stats).slice(0, 2);
   // Cards only use light CDN images (steam game headers). The heavy proxied
   // preview collages (/api/supplier-image/…) are reserved for detail pages.
   const cardImage = (product.images ?? []).find((u) => u.startsWith("https://")) ?? null;
