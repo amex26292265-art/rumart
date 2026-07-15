@@ -27,8 +27,11 @@ const FORCE = process.env.FORCE_REFRESH === "1";
 const MAX_COST = 240; // supplier cost cap → sell ≈ ≤ $289 < $300
 const MAX_SELL = 300;
 const GAME_CAP = 30; // max listings per individual game
-const COUNTRY_CAP = 30; // max listings per country (social categories)
-const MISC_CAP = 60; // max listings in the "unclassified" bucket
+const COUNTRY_CAP = 40; // max listings per country (social categories)
+const MISC_CAP = 60; // max listings in the "unclassified" bucket (game categories)
+// Social accounts (discord especially) often expose no country, so a tight
+// misc cap would starve those categories. Allow far more country-less volume.
+const SOCIAL_MISC_CAP = 300;
 const PAGE_DELAY_MS = 3200;
 const BAND_MAX_PAGES = 20;
 const CHUNK = 100;
@@ -151,7 +154,7 @@ function bucketFor(catSlug: string, listing: { title: string; attributes?: Recor
   }
   if (COUNTRY_CATEGORIES.has(catSlug)) {
     const c = typeof at.country === "string" && at.country.trim() ? at.country.trim().toLowerCase() : null;
-    return c ? { key: `country:${c}`, cap: COUNTRY_CAP } : { key: "misc", cap: MISC_CAP };
+    return c ? { key: `country:${c}`, cap: COUNTRY_CAP } : { key: "misc", cap: SOCIAL_MISC_CAP };
   }
   const kb = titleBucket(catSlug, listing.title);
   if (kb) return { key: `kw:${kb}`, cap: KEYWORD_BUCKETS[catSlug].cap };
