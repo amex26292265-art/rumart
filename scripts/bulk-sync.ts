@@ -1,5 +1,5 @@
 import "dotenv/config";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../src/lib/prisma";
 import { getSupplier } from "../src/lib/suppliers/registry";
 import { applyPricing, resolveCategoryPricing } from "../src/lib/pricing/engine";
@@ -273,8 +273,18 @@ async function main() {
     where: { supplierId: supplierRow.id },
     select: { id: true, supplierItemId: true, cost: true, status: true },
   })) {
-    known.set(p.supplierItemId, { id: p.id, cost: p.cost, status: p.status });
+    if (p.supplierItemId) known.set(p.supplierItemId, { id: p.id, cost: p.cost, status: p.status });
   }
+
+  // Items imported before image support — re-encountering them backfills images.
+  const noImages = new Set<string>();
+  for (const p of await prisma.product.findMany({
+    where: { supplierId: supplierRow.id, images: { equals: Prisma.DbNull } },
+    select: { supplierItemId: true },
+  })) {
+    if (p.supplierItemId) noImages.add(p.supplierItemId);
+  }
+  console.log(`${noImages.size} products still without images`);
 
   const activeCounts = new Map<string, number>();
   for (const cat of categories) {
@@ -317,11 +327,17 @@ async function main() {
 
             const existing = known.get(listing.supplierItemId);
             if (existing) {
-              if (existing.status === "active" && existing.cost !== listing.cost) {
+              const needsImages = noImages.has(listing.supplierItemId) && !!listing.images?.length;
+              if (existing.status === "active" && (existing.cost !== listing.cost || needsImages)) {
                 await prisma.product.update({
                   where: { id: existing.id },
-                  data: { price: applyPricing(listing.cost, pricing), cost: listing.cost },
+                  data: {
+                    price: applyPricing(listing.cost, pricing),
+                    cost: listing.cost,
+                    ...(needsImages ? { images: listing.images as Prisma.InputJsonValue } : {}),
+                  },
                 });
+                if (needsImages) noImages.delete(listing.supplierItemId);
                 updated++;
               }
               continue;
@@ -343,6 +359,7 @@ async function main() {
               deliveryType: listing.deliveryType,
               status: "active",
               stock: 1,
+              images: listing.images?.length ? (listing.images as Prisma.InputJsonValue) : undefined,
               attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
               country: idx.country,
               emailNative: idx.emailNative,

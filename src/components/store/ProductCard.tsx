@@ -20,6 +20,7 @@ export interface ProductCardData {
   categoryIcon?: string | null;
   accent?: string;
   attributes?: Record<string, unknown> | null;
+  images?: string[] | null;
 }
 
 export function ProductCard({ product }: { product: ProductCardData }) {
@@ -32,6 +33,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const keyStats = stats
     .filter((s) => ["Register date", "Total games", "Balance", "Account level"].includes(s.label))
     .slice(0, 2);
+  // Cards only use light CDN images (steam game headers). The heavy proxied
+  // preview collages (/api/supplier-image/…) are reserved for detail pages.
+  const cardImage = (product.images ?? []).find((u) => u.startsWith("https://")) ?? null;
 
   return (
     <motion.article
@@ -47,10 +51,20 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             background: `linear-gradient(135deg, ${product.accent ?? "#1d1d21"} 0%, #0a0a0b 130%)`,
           }}
         >
-          <BrandIcon
-            slug={product.categorySlug}
-            className="h-12 w-12 text-white/90 transition-transform duration-500 group-hover:scale-110"
-          />
+          {cardImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={cardImage}
+              alt={product.title}
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <BrandIcon
+              slug={product.categorySlug}
+              className="h-12 w-12 text-white/90 transition-transform duration-500 group-hover:scale-110"
+            />
+          )}
           <span className="absolute left-3 top-3">
             <Badge tone="dark">{product.categoryName}</Badge>
           </span>

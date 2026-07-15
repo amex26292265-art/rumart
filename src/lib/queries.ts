@@ -19,6 +19,7 @@ function toCard(
     categoryIcon: p.category.icon,
     accent: p.category.accent,
     attributes: (p.attributes as Record<string, unknown> | null) ?? null,
+    images: (p.images as string[] | null) ?? null,
   };
 }
 

@@ -32,6 +32,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const emailNative = attrs.emailNative === true;
   const origin = typeof attrs.origin === "string" ? attrs.origin : null;
   const country = typeof attrs.country === "string" ? countryLabel(attrs.country) : null;
+  const images = (Array.isArray(product.images) ? product.images : []) as string[];
+  const gameImages = images.filter((u) => u.startsWith("https://")).slice(0, 6);
+  const previewImages = images.filter((u) => u.startsWith("/api/supplier-image/")).slice(0, 2);
 
   // Overview rows (hide empty).
   const overview: Row[] = [
@@ -72,12 +75,50 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           </Reveal>
 
+          {/* Game covers from the account's own library */}
+          {gameImages.length > 0 && (
+            <Reveal delay={0.08}>
+              <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {gameImages.map((src, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={src}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-[460/215] w-full rounded-xl border border-mist-200 object-cover"
+                  />
+                ))}
+              </div>
+            </Reveal>
+          )}
+
           {/* Product Overview */}
           <Reveal delay={0.1}>
             <SectionCard title="Product overview">
               <RowGrid rows={overview} />
             </SectionCard>
           </Reveal>
+
+          {/* Supplier preview collages (skins, cosmetics…) — lazy, edge-cached */}
+          {previewImages.length > 0 && (
+            <Reveal delay={0.15}>
+              <SectionCard title="Account preview">
+                <div className="flex flex-col gap-3">
+                  {previewImages.map((src, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={i}
+                      src={src}
+                      alt="Account contents preview"
+                      loading="lazy"
+                      className="w-full rounded-xl border border-mist-200"
+                    />
+                  ))}
+                </div>
+              </SectionCard>
+            </Reveal>
+          )}
 
           {/* Grouped API sections */}
           {sections.map((sec, i) => (

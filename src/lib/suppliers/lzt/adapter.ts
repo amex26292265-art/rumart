@@ -69,9 +69,46 @@ export const LZT_CATEGORY_MAP: Record<string, string> = {
   vpn: "vpn",
 };
 
+/**
+ * Collect displayable images for a listing:
+ *  - Steam: public CDN header images of the account's own games (small webp,
+ *    safe to hotlink — used on product cards). Ordered by playtime.
+ *  - LZT preview collages (fortnite skins, etc.): the API endpoint needs our
+ *    Bearer token and returns huge base64 payloads, so these are stored as
+ *    /api/supplier-image proxy URLs and only rendered lazily on detail pages.
+ */
+function extractImages(raw: LztRawItem): string[] | undefined {
+  const images: string[] = [];
+
+  const fullGames = raw["steam_full_games"] as
+    | { list?: Record<string, { img?: unknown; playtime_forever?: unknown }> }
+    | undefined;
+  if (fullGames?.list) {
+    const headers = Object.values(fullGames.list)
+      .filter((g): g is { img: string; playtime_forever?: unknown } => typeof g?.img === "string")
+      .sort((a, b) => (Number(b.playtime_forever) || 0) - (Number(a.playtime_forever) || 0))
+      .slice(0, 6)
+      .map((g) => g.img);
+    images.push(...headers);
+  }
+
+  const previews = (raw as { imagePreviewLinks?: { download?: Record<string, unknown> } })
+    .imagePreviewLinks?.download;
+  if (previews) {
+    for (const type of Object.keys(previews).slice(0, 4)) {
+      if (/^[a-z_]{2,20}$/.test(type)) {
+        images.push(`/api/supplier-image/${raw.item_id}?type=${type}`);
+      }
+    }
+  }
+
+  return images.length ? images.slice(0, 8) : undefined;
+}
+
 function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing {
   const info = buildAccountInfo(raw);
   return {
+    images: extractImages(raw),
     supplierItemId: String(raw.item_id),
     title: raw.title_en || raw.title || `${supplierCategory} account #${raw.item_id}`,
     // Clean, English, auto-generated summary (never a raw foreign-language blob).
