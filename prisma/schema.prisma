@@ -3,18 +3,20 @@
 // SQLite has no native enums, so status/type fields are strings with documented values.
 
 generator client {
+  // Generated with `prisma generate --no-engine` (see package.json scripts):
+  // all queries go over HTTP through Prisma Accelerate — no query engine
+  // binary/WASM and no filesystem access, so it runs on Cloudflare Workers.
   provider = "prisma-client-js"
-  // queryCompiler + driverAdapters = an engine-less client (pure TypeScript, no
-  // binary/WASM query engine, no filesystem access). Required to run on
-  // Cloudflare Workers, where the binary engine's fs.readdir throws.
-  previewFeatures = ["queryCompiler", "driverAdapters"]
 }
 
 datasource db {
-  // PostgreSQL for Vercel (serverless can't use SQLite). Use one Neon/Vercel
-  // Postgres for both local dev and production via the same DATABASE_URL.
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // DATABASE_URL is the Prisma Accelerate URL (prisma://...) used by the app
+  // at runtime everywhere (local dev, Node, Cloudflare Workers).
+  // DIRECT_DATABASE_URL is the underlying Neon Postgres URL, used only by the
+  // Prisma CLI (db push / migrate / studio) which can't go through Accelerate.
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ─── Auth / customers ──────────────────────────────────────────────────────

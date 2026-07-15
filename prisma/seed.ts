@@ -1,7 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client/edge";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
 
+// Edge client: the app's client is generated with --no-engine, so seeding also
+// goes through Prisma Accelerate (DATABASE_URL = prisma:// URL).
 const prisma = new PrismaClient();
 
 /**
