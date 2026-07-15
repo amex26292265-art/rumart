@@ -9,14 +9,33 @@ import type { SupplierListing } from "../src/lib/suppliers/types";
 /**
  * Bulk catalog import — run with `pnpm exec tsx scripts/bulk-sync.ts`.
  *
- * Same sources and pricing as the in-app sync service, but built for large
- * imports: it preloads existing supplier item ids once, inserts new products
- * with createMany in chunks (instead of one query pair per item), and paces
- * LZT page requests so long runs never hit the API rate limit. Safe to re-run:
- * existing products get a price/status refresh, new ones are imported.
+ * Curation rules (why this is more than a dumb pager):
+ *  - Sell price never exceeds $300 → supplier cost is capped at $240
+ *    (240 * 1.2 markup ≈ $288.99). Anything already above $300 is archived.
+ *  - Variety: game categories are bucketed per game (max ~30 per game so the
+ *    catalog is never 1000 copies of one title); social categories are
+ *    bucketed per country. Each category is fetched across several price
+ *    bands, which naturally pulls in different games/regions.
+ *  - Safe to re-run: refreshes prices of known items, imports new ones,
+ *    re-balances buckets.
  */
 
-// Storefront category slug → how many products to keep in it.
+const MAX_COST = 240; // supplier cost cap → sell ≈ ≤ $289 < $300
+const MAX_SELL = 300;
+const GAME_CAP = 30; // max listings per individual game
+const COUNTRY_CAP = 30; // max listings per country (social categories)
+const MISC_CAP = 60; // max listings in the "unclassified" bucket
+const PAGE_DELAY_MS = 3200;
+const BAND_MAX_PAGES = 20;
+const CHUNK = 100;
+const PRICE_BANDS: Array<[number, number]> = [
+  [0, 20],
+  [20, 60],
+  [60, 140],
+  [140, MAX_COST],
+];
+
+// Storefront category slug → total import target.
 const IMPORT_TARGETS: Record<string, number> = {
   steam: 1500,
   fortnite: 800,
@@ -39,27 +58,101 @@ const IMPORT_TARGETS: Record<string, number> = {
   giftcards: 400,
 };
 
-const PAGE_DELAY_MS = 3200; // LZT pacing: well under the documented 300 req/min
-const MAX_PAGES = 60; // hard stop per category
-const CHUNK = 100; // createMany batch size
+// Named sub-game buckets (title keywords, lowercase). Cap chosen so the
+// buckets can still add up to the category target.
+const KEYWORD_BUCKETS: Record<string, { cap: number; buckets: Record<string, string[]> }> = {
+  valorant: { cap: 350, buckets: { valorant: ["valorant"], league: ["league", "lol "] } },
+  supercell: {
+    cap: 150,
+    buckets: {
+      "clash of clans": ["clash of clans", "coc"],
+      "brawl stars": ["brawl"],
+      "clash royale": ["royale"],
+      "hay day": ["hay day"],
+    },
+  },
+  ea: {
+    cap: 120,
+    buckets: {
+      "ea fc / fifa": ["fifa", "fc 2", "fc2", "ea fc"],
+      apex: ["apex"],
+      battlefield: ["battlefield"],
+      sims: ["sims"],
+      "need for speed": ["need for speed", "nfs"],
+    },
+  },
+  battlenet: {
+    cap: 100,
+    buckets: {
+      overwatch: ["overwatch"],
+      diablo: ["diablo"],
+      "call of duty": ["call of duty", "cod", "warzone"],
+      "world of warcraft": ["world of warcraft", "wow"],
+      hearthstone: ["hearthstone"],
+      starcraft: ["starcraft"],
+    },
+  },
+  epicgames: {
+    cap: 150,
+    buckets: {
+      fortnite: ["fortnite"],
+      gta: ["gta", "grand theft"],
+      "rocket league": ["rocket league"],
+    },
+  },
+  genshin: {
+    cap: 150,
+    buckets: {
+      genshin: ["genshin"],
+      "star rail": ["star rail", "hsr"],
+      honkai: ["honkai impact", "honkai 3"],
+      zenless: ["zenless", "zzz"],
+    },
+  },
+  uplay: {
+    cap: 100,
+    buckets: {
+      "rainbow six": ["rainbow", "r6", "siege"],
+      "assassin's creed": ["assassin"],
+      "far cry": ["far cry"],
+      division: ["division"],
+    },
+  },
+};
+
+// Steam is special: bucket by the account's own detected game list (dynamic).
+const STEAM_SLUG = "steam";
+// Social categories: bucket by country for regional variety.
+const COUNTRY_CATEGORIES = new Set(["discord", "telegram", "instagram", "tiktok"]);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchPageWithRetry(
-  supplier: NonNullable<ReturnType<typeof getSupplier>>,
-  supplierCategory: string,
-  page: number,
-): Promise<SupplierListing[]> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await supplier.listItems({ supplierCategory, page });
-    } catch (err) {
-      if (attempt >= 4) throw err;
-      const wait = attempt * 20_000;
-      console.warn(`  ${supplierCategory} p${page}: ${(err as Error).message} — retry in ${wait / 1000}s`);
-      await sleep(wait);
-    }
+function titleBucket(catSlug: string, title: string): string | null {
+  const conf = KEYWORD_BUCKETS[catSlug];
+  if (!conf) return null;
+  const t = title.toLowerCase();
+  for (const [bucket, words] of Object.entries(conf.buckets)) {
+    if (words.some((w) => t.includes(w))) return bucket;
   }
+  return null;
+}
+
+/** Bucket key + cap for a listing in a category. */
+function bucketFor(catSlug: string, listing: { title: string; attributes?: Record<string, unknown> | null }): { key: string; cap: number } {
+  const at = (listing.attributes ?? {}) as Record<string, unknown>;
+  if (catSlug === STEAM_SLUG) {
+    const games = Array.isArray(at.games) ? (at.games as string[]) : [];
+    const g = games.find((x) => typeof x === "string" && x.trim().length > 1);
+    return g ? { key: `game:${g.toLowerCase()}`, cap: GAME_CAP } : { key: "misc", cap: MISC_CAP };
+  }
+  if (COUNTRY_CATEGORIES.has(catSlug)) {
+    const c = typeof at.country === "string" && at.country.trim() ? at.country.trim().toLowerCase() : null;
+    return c ? { key: `country:${c}`, cap: COUNTRY_CAP } : { key: "misc", cap: MISC_CAP };
+  }
+  const kb = titleBucket(catSlug, listing.title);
+  if (kb) return { key: `kw:${kb}`, cap: KEYWORD_BUCKETS[catSlug].cap };
+  if (KEYWORD_BUCKETS[catSlug]) return { key: "misc", cap: MISC_CAP };
+  return { key: "any", cap: Number.MAX_SAFE_INTEGER }; // single-game categories: no bucket limits
 }
 
 function indexable(listing: SupplierListing) {
@@ -71,6 +164,25 @@ function indexable(listing: SupplierListing) {
     level: typeof at.level === "number" ? at.level : null,
     tags: Array.isArray(at.tags) ? (at.tags as Prisma.InputJsonValue) : undefined,
   };
+}
+
+async function fetchPageWithRetry(
+  supplier: NonNullable<ReturnType<typeof getSupplier>>,
+  supplierCategory: string,
+  page: number,
+  minPrice: number,
+  maxPrice: number,
+): Promise<SupplierListing[]> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await supplier.listItems({ supplierCategory, page, minPrice, maxPrice });
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      const wait = attempt * 20_000;
+      console.warn(`  ${supplierCategory} p${page}: ${(err as Error).message} — retry in ${wait / 1000}s`);
+      await sleep(wait);
+    }
+  }
 }
 
 async function main() {
@@ -89,7 +201,6 @@ async function main() {
       data: { name: "Global markup", type: "percent", value: 20, minMargin: 1, rounding: "up_99", priority: 0 },
     });
   }
-  console.log("Pricing: global +20%, min $1 margin, .99 rounding");
 
   const supplierRow = await prisma.supplier.upsert({
     where: { slug: supplier.slug },
@@ -99,8 +210,7 @@ async function main() {
 
   const categories = await prisma.category.findMany({ where: { supplierCategory: { not: null } } });
 
-  // One enabled sync rule per category so the admin panel reflects reality and
-  // future in-app syncs use the same targets.
+  // Keep the admin panel's sync rules in line with the curation rules.
   for (const cat of categories) {
     const target = IMPORT_TARGETS[cat.slug] ?? 400;
     const name = `${cat.slug} — bulk import`;
@@ -111,12 +221,51 @@ async function main() {
       categoryId: cat.id,
       supplierCategory: cat.supplierCategory!,
       autoDeliveryOnly: true,
+      maxSupplierPrice: MAX_COST,
       maxImport: target,
     };
     if (existing) await prisma.syncRule.update({ where: { id: existing.id }, data });
     else await prisma.syncRule.create({ data });
   }
-  console.log(`Sync rules ready for ${categories.length} categories`);
+  console.log(`Sync rules ready for ${categories.length} categories (cost cap $${MAX_COST})`);
+
+  // ── Cleanup pass 1: nothing on sale above $300 ─────────────────────────────
+  const over = await prisma.product.updateMany({
+    where: { status: "active", price: { gt: MAX_SELL } },
+    data: { status: "archived" },
+  });
+  console.log(`Archived ${over.count} products priced above $${MAX_SELL}`);
+
+  // ── Cleanup pass 2: re-balance existing catalog to the bucket caps ────────
+  const bucketCounts = new Map<string, Map<string, number>>(); // catId → bucket → count
+  for (const cat of categories) {
+    const rows = await prisma.product.findMany({
+      where: { categoryId: cat.id, status: "active", supplierId: supplierRow.id },
+      select: { id: true, title: true, attributes: true, price: true },
+      orderBy: { price: "asc" }, // keep the cheapest listings in each bucket
+    });
+    const counts = new Map<string, number>();
+    const surplus: string[] = [];
+    for (const p of rows) {
+      const { key, cap } = bucketFor(cat.slug, {
+        title: p.title,
+        attributes: p.attributes as Record<string, unknown> | null,
+      });
+      const n = (counts.get(key) ?? 0) + 1;
+      counts.set(key, n);
+      if (n > cap) surplus.push(p.id);
+    }
+    if (surplus.length) {
+      for (let i = 0; i < surplus.length; i += 200) {
+        await prisma.product.updateMany({
+          where: { id: { in: surplus.slice(i, i + 200) } },
+          data: { status: "archived" },
+        });
+      }
+      console.log(`${cat.slug}: archived ${surplus.length} surplus (variety re-balance)`);
+    }
+    bucketCounts.set(cat.id, counts);
+  }
 
   // Preload every known supplier item so re-runs don't re-query per item.
   const known = new Map<string, { id: string; cost: number; status: string }>();
@@ -126,7 +275,14 @@ async function main() {
   })) {
     known.set(p.supplierItemId, { id: p.id, cost: p.cost, status: p.status });
   }
-  console.log(`${known.size} products already in catalog`);
+
+  const activeCounts = new Map<string, number>();
+  for (const cat of categories) {
+    activeCounts.set(
+      cat.id,
+      await prisma.product.count({ where: { categoryId: cat.id, status: "active" } }),
+    );
+  }
 
   const run = await prisma.syncRun.create({ data: { supplierId: supplierRow.id, status: "running" } });
   let totalImported = 0;
@@ -135,81 +291,96 @@ async function main() {
   try {
     for (const cat of categories) {
       const target = IMPORT_TARGETS[cat.slug] ?? 400;
-      const pricing = await resolveCategoryPricing(cat.id);
-      const collected: SupplierListing[] = [];
-      const seen = new Set<string>();
-
-      for (let page = 1; page <= MAX_PAGES && collected.length < target; page++) {
-        const batch = await fetchPageWithRetry(supplier, cat.supplierCategory!, page);
-        if (batch.length === 0) break;
-        for (const item of batch) {
-          if (!seen.has(item.supplierItemId)) {
-            seen.add(item.supplierItemId);
-            collected.push(item);
-          }
-        }
-        if (page % 10 === 0) console.log(`  ${cat.slug}: page ${page}, ${collected.length}/${target}`);
-        await sleep(PAGE_DELAY_MS);
+      let have = activeCounts.get(cat.id) ?? 0;
+      if (have >= target) {
+        console.log(`${cat.slug}: already at ${have}/${target}, skipping`);
+        continue;
       }
-      const listings = collected.slice(0, target);
-
-      // Split into brand-new rows and refreshes of existing ones.
+      const pricing = await resolveCategoryPricing(cat.id);
+      const counts = bucketCounts.get(cat.id) ?? new Map<string, number>();
       const fresh: Prisma.ProductCreateManyInput[] = [];
       let updated = 0;
-      for (const listing of listings) {
-        const price = applyPricing(listing.cost, pricing);
-        const idx = indexable(listing);
-        const existing = known.get(listing.supplierItemId);
-        if (existing) {
-          if (existing.cost !== listing.cost || existing.status !== "active") {
-            await prisma.product.update({
-              where: { id: existing.id },
-              data: { price, cost: listing.cost, status: "active" },
+
+      for (const [pmin, pmax] of PRICE_BANDS) {
+        if (have + fresh.length >= target) break;
+        let dryPages = 0;
+        for (let page = 1; page <= BAND_MAX_PAGES; page++) {
+          if (have + fresh.length >= target) break;
+          const batch = await fetchPageWithRetry(supplier, cat.supplierCategory!, page, pmin, pmax);
+          await sleep(PAGE_DELAY_MS);
+          if (batch.length === 0) break;
+
+          let accepted = 0;
+          for (const listing of batch) {
+            if (have + fresh.length >= target) break;
+            if (listing.cost > MAX_COST || listing.cost <= 0) continue;
+
+            const existing = known.get(listing.supplierItemId);
+            if (existing) {
+              if (existing.status === "active" && existing.cost !== listing.cost) {
+                await prisma.product.update({
+                  where: { id: existing.id },
+                  data: { price: applyPricing(listing.cost, pricing), cost: listing.cost },
+                });
+                updated++;
+              }
+              continue;
+            }
+
+            const { key, cap } = bucketFor(cat.slug, listing);
+            const n = counts.get(key) ?? 0;
+            if (n >= cap) continue;
+            counts.set(key, n + 1);
+
+            const idx = indexable(listing);
+            fresh.push({
+              slug: slugify(`${listing.title}-${listing.supplierItemId}`),
+              title: listing.title,
+              description: listing.description,
+              price: applyPricing(listing.cost, pricing),
+              cost: listing.cost,
+              currency: listing.currency,
+              deliveryType: listing.deliveryType,
+              status: "active",
+              stock: 1,
+              attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+              country: idx.country,
+              emailNative: idx.emailNative,
+              vac: idx.vac,
+              level: idx.level,
+              tags: idx.tags,
+              supplierItemId: listing.supplierItemId,
+              supplierId: supplierRow.id,
+              categoryId: cat.id,
             });
-            updated++;
+            known.set(listing.supplierItemId, { id: "pending", cost: listing.cost, status: "active" });
+            accepted++;
           }
-          continue;
+
+          // Band exhausted: two consecutive pages added nothing (buckets full).
+          dryPages = accepted === 0 ? dryPages + 1 : 0;
+          if (dryPages >= 2) break;
         }
-        fresh.push({
-          slug: slugify(`${listing.title}-${listing.supplierItemId}`),
-          title: listing.title,
-          description: listing.description,
-          price,
-          cost: listing.cost,
-          currency: listing.currency,
-          deliveryType: listing.deliveryType,
-          status: "active",
-          stock: 1,
-          attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
-          country: idx.country,
-          emailNative: idx.emailNative,
-          vac: idx.vac,
-          level: idx.level,
-          tags: idx.tags,
-          supplierItemId: listing.supplierItemId,
-          supplierId: supplierRow.id,
-          categoryId: cat.id,
-        });
-        known.set(listing.supplierItemId, { id: "pending", cost: listing.cost, status: "active" });
       }
 
       let imported = 0;
       for (let i = 0; i < fresh.length; i += CHUNK) {
-        const chunk = fresh.slice(i, i + CHUNK);
-        const res = await prisma.product.createMany({ data: chunk, skipDuplicates: true });
+        const res = await prisma.product.createMany({ data: fresh.slice(i, i + CHUNK), skipDuplicates: true });
         imported += res.count;
       }
+      have += imported;
 
       totalImported += imported;
       totalUpdated += updated;
-      console.log(`${cat.slug}: +${imported} new, ${updated} refreshed (${listings.length} listed)`);
+      const distinct = [...counts.keys()].filter((k) => k !== "any").length;
+      console.log(`${cat.slug}: +${imported} new, ${updated} repriced → ${have}/${target} active (${distinct || "n/a"} buckets)`);
     }
 
     await prisma.syncRun.update({
       where: { id: run.id },
       data: { status: "success", imported: totalImported, updated: totalUpdated, finishedAt: new Date() },
     });
-    console.log(`DONE: ${totalImported} imported, ${totalUpdated} refreshed`);
+    console.log(`DONE: ${totalImported} imported, ${totalUpdated} repriced`);
   } catch (err) {
     await prisma.syncRun.update({
       where: { id: run.id },
