@@ -331,31 +331,35 @@ async function main() {
 
             const existing = known.get(listing.supplierItemId);
             if (existing) {
+              // "pending" = just inserted earlier this run (no real row id yet).
+              if (existing.id === "pending") continue;
               const needsImages = noImages.has(listing.supplierItemId) && !!listing.images?.length;
               if (existing.status === "active" && (FORCE || existing.cost !== listing.cost || needsImages)) {
                 const idx = indexable(listing);
-                await prisma.product.update({
-                  where: { id: existing.id },
-                  data: {
-                    price: applyPricing(listing.cost, pricing),
-                    cost: listing.cost,
-                    ...(needsImages || (FORCE && listing.images?.length)
-                      ? { images: listing.images as Prisma.InputJsonValue }
-                      : {}),
-                    ...(FORCE
-                      ? {
-                          title: listing.title,
-                          description: listing.description,
-                          attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
-                          country: idx.country,
-                          emailNative: idx.emailNative,
-                          vac: idx.vac,
-                          level: idx.level,
-                          tags: idx.tags,
-                        }
-                      : {}),
-                  },
-                });
+                await prisma.product
+                  .update({
+                    where: { id: existing.id },
+                    data: {
+                      price: applyPricing(listing.cost, pricing),
+                      cost: listing.cost,
+                      ...(needsImages || (FORCE && listing.images?.length)
+                        ? { images: listing.images as Prisma.InputJsonValue }
+                        : {}),
+                      ...(FORCE
+                        ? {
+                            title: listing.title,
+                            description: listing.description,
+                            attributes: (listing.attributes ?? undefined) as Prisma.InputJsonValue | undefined,
+                            country: idx.country,
+                            emailNative: idx.emailNative,
+                            vac: idx.vac,
+                            level: idx.level,
+                            tags: idx.tags,
+                          }
+                        : {}),
+                    },
+                  })
+                  .catch(() => undefined); // row vanished mid-run — skip
                 if (needsImages) noImages.delete(listing.supplierItemId);
                 updated++;
               }

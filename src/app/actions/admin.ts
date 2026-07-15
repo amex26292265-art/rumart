@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { runAllRules } from "@/lib/sync/sync-service";
 import { SITE_SETTING_KEYS } from "@/lib/site-settings";
+import { encryptSecret } from "@/lib/crypto";
 
 async function requireAdmin() {
   const session = await auth();
@@ -123,6 +124,73 @@ export async function updateProduct(fd: FormData) {
   await prisma.product.update({ where: { id }, data });
   revalidatePath("/admin/products");
   revalidatePath("/", "layout");
+}
+
+/**
+ * Manually fulfill a pending order: encrypt the credentials the admin pastes,
+ * attach them to the order, mark it completed and notify the customer. This is
+ * how orders that fell back to "pending manual fulfillment" get delivered.
+ */
+export async function fulfillOrderManually(
+  fd: FormData,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const reference = str(fd, "reference");
+  const credentials = str(fd, "credentials");
+  if (!reference || !credentials) return { ok: false, error: "Reference and credentials are required." };
+
+  const order = await prisma.order.findUnique({
+    where: { reference },
+    include: { items: true },
+  });
+  if (!order) return { ok: false, error: "Order not found." };
+  if (order.status === "completed") return { ok: false, error: "Order is already completed." };
+
+  await prisma.credential.create({
+    data: {
+      orderId: order.id,
+      productTitle: order.items[0]?.title ?? "Account",
+      ciphertext: encryptSecret(credentials),
+    },
+  });
+  await prisma.order.update({ where: { id: order.id }, data: { status: "completed" } });
+  await prisma.notification
+    .create({
+      data: {
+        userId: order.userId,
+        title: `Order ${reference} delivered`,
+        body: "Your account has been delivered. Open your order to view the credentials.",
+      },
+    })
+    .catch(() => undefined);
+
+  revalidatePath("/admin/orders");
+  revalidatePath(`/orders/${reference}`);
+  return { ok: true };
+}
+
+/** Refund a pending/failed order back to the customer's wallet and cancel it. */
+export async function refundOrder(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const reference = str(fd, "reference");
+  const order = await prisma.order.findUnique({ where: { reference } });
+  if (!order) return { ok: false, error: "Order not found." };
+  if (order.status === "completed") return { ok: false, error: "Completed orders can't be auto-refunded." };
+  if (order.status === "refunded") return { ok: false, error: "Order already refunded." };
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: order.userId }, data: { walletBalance: { increment: order.total } } }),
+    prisma.order.update({ where: { id: order.id }, data: { status: "refunded" } }),
+    prisma.notification.create({
+      data: {
+        userId: order.userId,
+        title: `Order ${reference} refunded`,
+        body: `${order.total.toFixed(2)} ${order.currency} has been returned to your wallet.`,
+      },
+    }),
+  ]);
+  revalidatePath("/admin/orders");
+  return { ok: true };
 }
 
 /** Save editable site settings (Telegram handle, support note, tagline). */

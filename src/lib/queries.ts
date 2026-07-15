@@ -76,7 +76,7 @@ export interface MarketplaceFilters {
 
 export function buildProductWhere(filters: MarketplaceFilters): Prisma.ProductWhereInput {
   const where: Prisma.ProductWhereInput = { status: "active" };
-  if (filters.q) where.title = { contains: filters.q };
+  if (filters.q) where.title = { contains: filters.q, mode: "insensitive" };
   if (filters.category) where.category = { slug: filters.category };
   if (filters.min != null || filters.max != null) where.price = { gte: filters.min, lte: filters.max };
   if (filters.country) where.country = filters.country;
