@@ -306,7 +306,9 @@ async function main() {
     for (const cat of categories) {
       const target = IMPORT_TARGETS[cat.slug] ?? 400;
       let have = activeCounts.get(cat.id) ?? 0;
-      if (have >= target) {
+      // In FORCE mode we still walk the pages to refresh existing rows even when
+      // the category is already at target; only new inserts stop at target.
+      if (!FORCE && have >= target) {
         console.log(`${cat.slug}: already at ${have}/${target}, skipping`);
         continue;
       }
@@ -316,17 +318,18 @@ async function main() {
       let updated = 0;
 
       for (const [pmin, pmax] of PRICE_BANDS) {
-        if (have + fresh.length >= target) break;
+        if (!FORCE && have + fresh.length >= target) break;
         let dryPages = 0;
         for (let page = 1; page <= BAND_MAX_PAGES; page++) {
-          if (have + fresh.length >= target) break;
+          if (!FORCE && have + fresh.length >= target) break;
           const batch = await fetchPageWithRetry(supplier, cat.supplierCategory!, page, pmin, pmax);
           await sleep(PAGE_DELAY_MS);
           if (batch.length === 0) break;
 
           let accepted = 0;
+          let refreshed = 0;
           for (const listing of batch) {
-            if (have + fresh.length >= target) break;
+            if (!FORCE && have + fresh.length >= target) break;
             if (listing.cost > MAX_COST || listing.cost <= 0) continue;
 
             const existing = known.get(listing.supplierItemId);
@@ -362,10 +365,14 @@ async function main() {
                   .catch(() => undefined); // row vanished mid-run — skip
                 if (needsImages) noImages.delete(listing.supplierItemId);
                 updated++;
+                refreshed++;
               }
               continue;
             }
 
+            // Stop creating new products once at target (existing rows above are
+            // still refreshed in FORCE mode).
+            if (have + fresh.length >= target) continue;
             const { key, cap } = bucketFor(cat.slug, listing);
             const n = counts.get(key) ?? 0;
             if (n >= cap) continue;
@@ -397,8 +404,9 @@ async function main() {
             accepted++;
           }
 
-          // Band exhausted: two consecutive pages added nothing (buckets full).
-          dryPages = accepted === 0 ? dryPages + 1 : 0;
+          // Band exhausted: two consecutive pages did nothing (no new imports
+          // and — in FORCE mode — no refreshes either).
+          dryPages = accepted === 0 && refreshed === 0 ? dryPages + 1 : 0;
           if (dryPages >= 2) break;
         }
       }
