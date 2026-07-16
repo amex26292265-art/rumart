@@ -1,10 +1,9 @@
-import { PrismaClient } from "@prisma/client/edge";
 import "dotenv/config";
 import { hashPassword } from "../src/lib/password";
+import { makePrisma } from "../scripts/_db";
 
-// Edge client: the app's client is generated with --no-engine, so seeding also
-// goes through Prisma Accelerate (DATABASE_URL = prisma:// URL).
-const prisma = new PrismaClient();
+// Engine-less client over the Neon driver adapter (direct connection).
+const prisma = makePrisma();
 
 /**
  * Seeds ONLY structural data — admin user, supplier, categories, a default

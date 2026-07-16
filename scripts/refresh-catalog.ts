@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { Prisma, PrismaClient } from "@prisma/client/edge";
+import { Prisma } from "@prisma/client";
+import { makePrisma } from "./_db";
 import { getSupplier } from "../src/lib/suppliers/registry";
 import { applyPricing, resolveCategoryPricing } from "../src/lib/pricing/engine";
 import type { PricingRuleInput } from "../src/lib/pricing/engine";
@@ -16,7 +17,7 @@ import type { PricingRuleInput } from "../src/lib/pricing/engine";
  * A product whose listing is gone upstream (sold/delisted) is marked
  * unavailable so customers never see dead stock.
  */
-const prisma = new PrismaClient();
+const prisma = makePrisma();
 const PACE_MS = 320; // ~185 req/min, safely under LZT's 300/min
 const REFRESH_ALL = process.env.REFRESH_ALL === "1";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

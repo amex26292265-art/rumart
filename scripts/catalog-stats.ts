@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client/edge";
-const prisma = new PrismaClient();
+import { makePrisma } from "./_db";
+const prisma = makePrisma();
 
 async function main() {
   const total = await prisma.product.count({ where: { status: "active" } });

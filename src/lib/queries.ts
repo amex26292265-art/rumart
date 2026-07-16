@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import type { ProductCardData } from "@/components/store/ProductCard";
+import { memo } from "@/lib/cache";
 
 /** Shape a Product row (with its category) into card data for the UI. */
 function toCard(
@@ -24,37 +25,44 @@ function toCard(
 }
 
 export async function getFeaturedCategories() {
-  return prisma.category.findMany({
-    where: { featured: true },
-    orderBy: { order: "asc" },
-    include: { _count: { select: { products: { where: { status: "active" } } } } },
-  });
+  // Cached ~5 min — the homepage category grid is the same for everyone.
+  return memo("cat-featured", 300_000, () =>
+    prisma.category.findMany({
+      where: { featured: true },
+      orderBy: { order: "asc" },
+      include: { _count: { select: { products: { where: { status: "active" } } } } },
+    }),
+  );
 }
 
 export async function getAllCategories() {
-  return prisma.category.findMany({
-    orderBy: { order: "asc" },
-    include: { _count: { select: { products: { where: { status: "active" } } } } },
-  });
+  return memo("cat-all", 300_000, () =>
+    prisma.category.findMany({
+      orderBy: { order: "asc" },
+      include: { _count: { select: { products: { where: { status: "active" } } } } },
+    }),
+  );
 }
 
 export async function getTrending(limit = 8): Promise<ProductCardData[]> {
-  // Lead the homepage with Steam accounts (flagship category, and they carry
-  // real game-cover images). Top up with other recent listings if needed.
-  const steam = await prisma.product.findMany({
-    where: { status: "active", category: { slug: "steam" } },
-    orderBy: [{ createdAt: "desc" }],
-    take: limit,
-    include: { category: true },
+  // Cached ~5 min — homepage "Trending now" is identical for all visitors.
+  return memo(`trending-${limit}`, 300_000, async () => {
+    // Lead with Steam accounts (flagship, and they carry game-cover images).
+    const steam = await prisma.product.findMany({
+      where: { status: "active", category: { slug: "steam" } },
+      orderBy: [{ createdAt: "desc" }],
+      take: limit,
+      include: { category: true },
+    });
+    if (steam.length >= limit) return steam.map(toCard);
+    const rest = await prisma.product.findMany({
+      where: { status: "active", NOT: { category: { slug: "steam" } } },
+      orderBy: { createdAt: "desc" },
+      take: limit - steam.length,
+      include: { category: true },
+    });
+    return [...steam, ...rest].map(toCard);
   });
-  if (steam.length >= limit) return steam.map(toCard);
-  const rest = await prisma.product.findMany({
-    where: { status: "active", NOT: { category: { slug: "steam" } } },
-    orderBy: { createdAt: "desc" },
-    take: limit - steam.length,
-    include: { category: true },
-  });
-  return [...steam, ...rest].map(toCard);
 }
 
 export async function getRecent(limit = 8): Promise<ProductCardData[]> {

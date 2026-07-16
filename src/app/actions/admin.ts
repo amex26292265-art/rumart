@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { runAllRules } from "@/lib/sync/sync-service";
 import { SITE_SETTING_KEYS } from "@/lib/site-settings";
 import { encryptSecret } from "@/lib/crypto";
+import { invalidate } from "@/lib/cache";
 
 async function requireAdmin() {
   const session = await auth();
@@ -26,6 +27,8 @@ export async function triggerSync(): Promise<{ imported: number; updated: number
   await requireAdmin();
   try {
     const res = await runAllRules();
+    invalidate("cat-");
+    invalidate("trending-");
     revalidatePath("/admin", "layout");
     return { imported: res.imported, updated: res.updated };
   } catch (err) {
@@ -279,6 +282,7 @@ export async function saveSiteSettings(fd: FormData) {
     const value = str(fd, key);
     await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
   }
+  invalidate("site-settings");
   revalidatePath("/", "layout");
   revalidatePath("/admin/settings");
 }

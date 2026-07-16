@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { Prisma, PrismaClient } from "@prisma/client/edge";
+import { Prisma } from "@prisma/client";
+import { makePrisma } from "./_db";
 import { getSupplier } from "../src/lib/suppliers/registry";
 import { applyPricing, resolveCategoryPricing } from "../src/lib/pricing/engine";
 
@@ -8,7 +9,7 @@ import { applyPricing, resolveCategoryPricing } from "../src/lib/pricing/engine"
  * field (telegram/instagram/tiktok) lands on every stored product — enabling
  * the country filter and country display for them.
  */
-const prisma = new PrismaClient();
+const prisma = makePrisma();
 const PACE_MS = 320;
 const SLUGS = ["telegram", "instagram", "tiktok", "discord"];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

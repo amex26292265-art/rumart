@@ -20,9 +20,9 @@
   // SECRETS (DATABASE_URL, AUTH_SECRET, SECRETS_ENCRYPTION_KEY, LZT_API_TOKEN,
   // NOWPAYMENTS_*, ADMIN_*) must be set as encrypted Secrets in the Cloudflare
   // dashboard — those are preserved across deploys and never committed.
-  // NOTE: DATABASE_URL must be the Prisma Accelerate URL (prisma://...), NOT
-  // the direct Neon postgres:// URL — the client is generated --no-engine and
-  // only speaks to Accelerate over HTTPS.
+  // NOTE: DATABASE_URL is the direct Neon Postgres URL (postgresql://...). The
+  // Prisma client is engine-less (driverAdapters + queryCompiler) and connects
+  // to Neon via the @neondatabase/serverless driver — no hosted DB platform.
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://rumart.xyz",
     "AUTH_URL": "https://rumart.xyz",
