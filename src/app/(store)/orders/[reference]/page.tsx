@@ -47,12 +47,18 @@ export default async function OrderPage({ params }: { params: Promise<{ referenc
           {delivered ? <CheckCircle2 className="h-8 w-8" /> : <Clock className="h-8 w-8" />}
         </div>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight text-ink-950">
-          {delivered ? "Order complete" : "Order received — finishing delivery"}
+          {delivered ? "Order complete" : "Pending manual fulfillment"}
         </h1>
         <p className="mt-2 text-ink-500">
           Reference <span className="font-mono font-medium text-ink-950">{order.reference}</span> ·{" "}
           {formatMoney(order.total, order.currency)}
         </p>
+        {!delivered && (
+          <p className="mt-2 text-sm text-ink-500">
+            Your payment is confirmed. This order will be delivered manually — message us on Telegram
+            with your reference below and we’ll send your account right away.
+          </p>
+        )}
       </Reveal>
 
       {delivered ? (

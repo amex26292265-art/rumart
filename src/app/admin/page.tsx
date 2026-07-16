@@ -2,9 +2,11 @@ import Link from "next/link";
 import { DollarSign, TrendingUp, Receipt, Users, Package, Clock } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { isSupplierConfigured } from "@/lib/env";
+import { getSupplier } from "@/lib/suppliers/registry";
 import { Counter } from "@/components/ui/counter";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/utils";
+import { WalletCredit } from "./WalletCredit";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,9 @@ export default async function AdminDashboard() {
     prisma.order.findMany({ orderBy: { createdAt: "desc" }, take: 6, include: { items: true } }),
     prisma.syncRun.findFirst({ orderBy: { startedAt: "desc" } }),
   ]);
+
+  // Live LZT wallet balance — auto-delivery only works when this covers costs.
+  const lztBalance = await getSupplier("lzt")?.getBalance?.().catch(() => null) ?? null;
 
   const revenue = revenueAgg._sum.total ?? 0;
   const profit = revenueAgg._sum.profit ?? 0;
@@ -39,10 +44,22 @@ export default async function AdminDashboard() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight text-ink-950">Dashboard</h1>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-ink-500">Supplier API</span>
+          <span className="text-ink-500">LZT balance</span>
+          {lztBalance == null ? (
+            <Badge tone="neutral">unknown</Badge>
+          ) : (
+            <Badge tone={lztBalance > 0 ? "success" : "danger"}>${lztBalance.toFixed(2)}</Badge>
+          )}
+          <span className="ml-3 text-ink-500">Supplier API</span>
           {isSupplierConfigured ? <Badge tone="success">Connected</Badge> : <Badge tone="warning">Not configured</Badge>}
         </div>
       </div>
+      {lztBalance != null && lztBalance < 5 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Your LZT wallet balance is low (${lztBalance.toFixed(2)}). Paid orders above this will be kept as
+          <span className="font-medium"> pending manual fulfillment</span> until you top up LZT.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((s) => (
@@ -108,6 +125,12 @@ export default async function AdminDashboard() {
           <Link href="/admin/sync" className="mt-4 block text-center text-sm font-medium text-accent-600">
             Go to synchronization →
           </Link>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+          <WalletCredit />
         </div>
       </div>
     </div>

@@ -169,6 +169,45 @@ export async function fulfillOrderManually(
   return { ok: true };
 }
 
+/**
+ * Manually credit a customer's wallet (by email). Use this to fund an account
+ * after a customer pays by another method (or to top up your own account for
+ * testing) while the crypto gateway is unavailable.
+ */
+export async function creditWallet(fd: FormData): Promise<{ ok: true; balance: number } | { ok: false; error: string }> {
+  await requireAdmin();
+  const email = str(fd, "email").toLowerCase();
+  const amount = num(fd, "amount");
+  if (!email) return { ok: false, error: "Customer email is required." };
+  if (amount == null || amount <= 0) return { ok: false, error: "Enter a positive amount." };
+  if (amount > 100000) return { ok: false, error: "Amount too large." };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return { ok: false, error: `No account found for ${email}.` };
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { walletBalance: { increment: amount } },
+  });
+  await prisma.deposit
+    .create({
+      data: { userId: user.id, amount, currency: "USD", provider: "manual", status: "paid", credited: true },
+    })
+    .catch(() => undefined);
+  await prisma.notification
+    .create({
+      data: {
+        userId: user.id,
+        title: `Wallet credited +$${amount.toFixed(2)}`,
+        body: `Your Rumart wallet balance is now $${updated.walletBalance.toFixed(2)}.`,
+      },
+    })
+    .catch(() => undefined);
+
+  revalidatePath("/admin", "layout");
+  return { ok: true, balance: updated.walletBalance };
+}
+
 /** Refund a pending/failed order back to the customer's wallet and cancel it. */
 export async function refundOrder(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireAdmin();
