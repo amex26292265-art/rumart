@@ -17,6 +17,7 @@ export function CategoryGrid({ categories }: { categories: CategoryTile[] }) {
         <StaggerItem key={c.slug}>
           <Link
             href={`/marketplace?category=${c.slug}`}
+            prefetch={false}
             className="card group flex flex-col items-center gap-3 p-5 text-center transition-all hover:-translate-y-1 hover:border-ink-900"
           >
             <span

@@ -60,7 +60,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       transition={{ type: "spring", stiffness: 320, damping: 24 }}
       className="card group relative flex flex-col overflow-hidden"
     >
-      <Link href={`/product/${product.slug}`} className="block">
+      <Link href={`/product/${product.slug}`} prefetch={false} className="block">
         {/* Brand tile — generated gradient, no stock imagery */}
         <div
           className="relative flex aspect-[16/10] items-center justify-center overflow-hidden"
@@ -96,7 +96,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
       </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <Link href={`/product/${product.slug}`}>
+        <Link href={`/product/${product.slug}`} prefetch={false}>
           <h3 className="line-clamp-2 text-sm font-medium leading-snug text-ink-950 transition-colors group-hover:text-accent-600">
             {product.title}
           </h3>

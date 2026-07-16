@@ -44,6 +44,7 @@ export function Navbar({
             <Link
               key={l.href}
               href={l.href}
+              prefetch={false}
               className="rounded-full px-3 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-mist-100 hover:text-ink-950"
             >
               {l.label}

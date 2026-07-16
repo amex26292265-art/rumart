@@ -39,6 +39,7 @@ export function ProductRow({ product }: { product: ProductCardData }) {
       {/* Icon tile */}
       <Link
         href={href}
+        prefetch={false}
         className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-white sm:h-20 sm:w-20"
         style={{ background: `linear-gradient(135deg, ${product.accent ?? "#1d1d21"}, #0a0a0b 150%)` }}
       >
@@ -48,7 +49,7 @@ export function ProductRow({ product }: { product: ProductCardData }) {
       {/* Main info */}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <Link href={href} className="min-w-0">
+          <Link href={href} prefetch={false} className="min-w-0">
             <h3 className="truncate text-[15px] font-semibold text-ink-950 transition-colors group-hover:text-accent-600">
               {product.title}
             </h3>
@@ -115,6 +116,7 @@ export function ProductRow({ product }: { product: ProductCardData }) {
           </IconButton>
           <Link
             href={href}
+            prefetch={false}
             className="rounded-xl bg-ink-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-ink-800"
           >
             Buy
