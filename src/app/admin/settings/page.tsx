@@ -27,7 +27,7 @@ export default async function AdminSettingsPage() {
         <h2 className="font-semibold text-ink-950">Contact & branding</h2>
         <div>
           <label className="mb-1 block text-[11px] font-semibold text-ink-400">Telegram username (without @)</label>
-          <input name="telegramHandle" defaultValue={settings.telegramHandle} placeholder="rumart_support" className="field" />
+          <input name="telegramHandle" defaultValue={settings.telegramHandle} placeholder="rumartxyz" className="field" />
           <p className="mt-1 text-xs text-ink-400">
             Buyers are sent here (t.me/{settings.telegramHandle}) when auto-delivery needs a manual step.
           </p>

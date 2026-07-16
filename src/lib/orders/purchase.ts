@@ -136,7 +136,8 @@ export async function purchaseProduct(userId: string, productId: string): Promis
   let credentials: string;
   try {
     const result = await supplier.purchase(product.supplierItemId, product.cost);
-    credentials = result.credentials;
+    // Store ONLY the sanitized fields (JSON), encrypted. Never the raw response.
+    credentials = JSON.stringify(result.fields);
   } catch (err) {
     // Auto-payment couldn't complete (our supplier balance, upstream error…).
     // Keep the customer's payment (order stays paid/pending) and route to Telegram.

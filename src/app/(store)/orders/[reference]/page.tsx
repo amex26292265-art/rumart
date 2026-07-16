@@ -4,7 +4,7 @@ import { CheckCircle2, Clock, Send } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { decryptSecret } from "@/lib/crypto";
-import { getSiteSettings, telegramContactUrl } from "@/lib/site-settings";
+import { getSiteSettings } from "@/lib/site-settings";
 import { Container } from "@/components/ui/container";
 import { Button } from "@/components/ui/button";
 import { Reveal } from "@/components/ui/motion";
@@ -26,15 +26,14 @@ export default async function OrderPage({ params }: { params: Promise<{ referenc
   if (!order || order.userId !== userId) notFound();
 
   const delivered = order.status === "completed" && order.credential.length > 0;
-  const credentials = order.credential.map((c) => ({
-    id: c.id,
-    productTitle: c.productTitle,
-    text: decryptSecret(c.ciphertext),
-  }));
-
-  const itemLines = order.items.map((i) => `• ${i.title}`).join("\n");
-  const tgMessage = `Hi! I need help with my Rumart order ${order.reference} (${formatMoney(order.total, order.currency)}):\n${itemLines}`;
-  const tgUrl = telegramContactUrl(settings.telegramHandle, tgMessage);
+  const productTitle = order.items[0]?.title ?? "Your product";
+  const orderDate = order.createdAt.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <Container className="max-w-2xl py-14">
@@ -47,38 +46,48 @@ export default async function OrderPage({ params }: { params: Promise<{ referenc
           {delivered ? <CheckCircle2 className="h-8 w-8" /> : <Clock className="h-8 w-8" />}
         </div>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight text-ink-950">
-          {delivered ? "Order complete" : "Pending manual fulfillment"}
+          {delivered ? "Order completed" : "Pending manual fulfillment"}
         </h1>
-        <p className="mt-2 text-ink-500">
-          Reference <span className="font-mono font-medium text-ink-950">{order.reference}</span> ·{" "}
-          {formatMoney(order.total, order.currency)}
-        </p>
-        {!delivered && (
-          <p className="mt-2 text-sm text-ink-500">
-            Your payment is confirmed. This order will be delivered manually — message us on Telegram
-            with your reference below and we’ll send your account right away.
-          </p>
-        )}
+      </Reveal>
+
+      {/* Order summary */}
+      <Reveal delay={0.05} className="mt-8">
+        <div className="card divide-y divide-mist-100">
+          <Row label="Reference" value={order.reference} mono />
+          <Row label="Product" value={productTitle} />
+          <Row label="Status" value={delivered ? "Delivered" : "Pending manual fulfillment"} />
+          <Row label="Total" value={formatMoney(order.total, order.currency)} />
+          <Row label="Delivery time" value={delivered ? "Instant" : "Manual"} />
+          <Row label="Order date" value={orderDate} />
+        </div>
       </Reveal>
 
       {delivered ? (
-        <Reveal delay={0.1} className="mt-8 space-y-4">
-          {credentials.map((c) => (
-            <CredentialViewer key={c.id} productTitle={c.productTitle} credentials={c.text} />
+        <Reveal delay={0.1} className="mt-6 space-y-4">
+          {order.credential.map((c) => (
+            <CredentialViewer key={c.id} productTitle={productTitle} credentials={decryptSecret(c.ciphertext)} />
           ))}
+          <div className="text-center">
+            <a href={settings.telegramUrl} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm">
+                <Send className="h-4 w-4" /> Contact support
+              </Button>
+            </a>
+          </div>
         </Reveal>
       ) : (
-        // Manual fallback: auto-delivery didn't complete → contact us on Telegram.
-        <Reveal delay={0.1} className="mt-8">
+        // Payment received, awaiting manual delivery. Only ever show our own
+        // Telegram — never any supplier detail.
+        <Reveal delay={0.1} className="mt-6">
           <div className="card p-6 text-center">
             <p className="text-ink-600">{settings.supportNote}</p>
-            <a href={tgUrl} target="_blank" rel="noopener noreferrer" className="mt-5 inline-block">
+            <a href={settings.telegramUrl} target="_blank" rel="noopener noreferrer" className="mt-5 inline-block">
               <Button size="lg" variant="accent">
-                <Send className="h-4 w-4" /> Contact us on Telegram
+                <Send className="h-4 w-4" /> Contact support on Telegram
               </Button>
             </a>
             <p className="mt-3 text-xs text-ink-400">
-              Your reference {order.reference} is already in the message — just hit send.
+              Quote your reference <span className="font-mono">{order.reference}</span> and we’ll deliver right away.
             </p>
           </div>
         </Reveal>
@@ -90,5 +99,14 @@ export default async function OrderPage({ params }: { params: Promise<{ referenc
         </Link>
       </div>
     </Container>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-3.5">
+      <span className="text-sm text-ink-500">{label}</span>
+      <span className={`text-right text-sm font-medium text-ink-950 ${mono ? "font-mono" : ""}`}>{value}</span>
+    </div>
   );
 }

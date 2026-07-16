@@ -1,4 +1,5 @@
 import type {
+  DeliveredField,
   Supplier,
   SupplierListing,
   SupplierPurchaseResult,
@@ -105,14 +106,31 @@ function extractImages(raw: LztRawItem): string[] | undefined {
   return images.length ? images.slice(0, 8) : undefined;
 }
 
+/**
+ * Strip any supplier-identifying text from customer-facing strings: the
+ * supplier's brand/domains, seller Telegram/contact links, and any leftover
+ * marketplace URLs. The customer must never learn where the account came from.
+ */
+function sanitizeSupplier(text: string): string {
+  return text
+    .replace(/https?:\/\/(www\.)?(lzt\.market|lolz\.live|lolz\.market|lolzteam\.[a-z]+|zelenka\.[a-z]+)\S*/gi, "")
+    .replace(/\b(lzt\.market|lolz\.live|lolzteam|zelenka|lztmarket|lzt|lolz)\b/gi, "")
+    .replace(/@?\bt\.me\/\S+/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s|•·,–-]+|[\s|•·,–-]+$/g, "")
+    .trim();
+}
+
 function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing {
   const info = buildAccountInfo(raw);
+  const rawTitle = raw.title_en || raw.title || `${supplierCategory} account #${raw.item_id}`;
+  const title = sanitizeSupplier(rawTitle) || `${supplierCategory || "Digital"} account`;
   return {
     images: extractImages(raw),
     supplierItemId: String(raw.item_id),
-    title: raw.title_en || raw.title || `${supplierCategory} account #${raw.item_id}`,
+    title,
     // Clean, English, auto-generated summary (never a raw foreign-language blob).
-    description: info.summary ?? undefined,
+    description: info.summary ? sanitizeSupplier(info.summary) || undefined : undefined,
     // We request prices in USD (currency=usd), so `price` is already USD.
     cost: Number(raw.price) || 0,
     currency: (raw.price_currency || "USD").toUpperCase(),
@@ -141,20 +159,46 @@ function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing {
   };
 }
 
-/** Extract a readable credential block from a purchase response. */
-function extractCredentials(res: LztPurchaseResponse): string {
-  const item = res.item;
-  const login = item?.loginData?.login ?? item?.login;
-  const password = item?.loginData?.password ?? item?.password;
-  const lines: string[] = [];
-  if (login) lines.push(`Login: ${login}`);
-  if (password) lines.push(`Password: ${password}`);
-  if (item?.email_login_data) lines.push(`Email access: ${item.email_login_data}`);
-  if (lines.length === 0) {
-    // Deliver the raw payload rather than fabricate anything.
-    return JSON.stringify(res, null, 2);
+/**
+ * Extract ONLY customer-facing credential fields from a purchase response.
+ *
+ * SECURITY: this is a strict allow-list. It never returns the raw response,
+ * seller/buyer objects, system_info, internal ids, or any market metadata —
+ * the customer must never learn the supplier. Anything not explicitly matched
+ * below is dropped.
+ */
+const CRED_RULES: { re: RegExp; label: string; secret: boolean }[] = [
+  { re: /^(email[_-]?login[_-]?data)$/i, label: "Email access", secret: true },
+  { re: /^(login|username|account[_-]?login|user)$/i, label: "Login", secret: false },
+  { re: /^(password|pass|account[_-]?password|pwd)$/i, label: "Password", secret: true },
+  { re: /^(email|mail|email[_-]?address)$/i, label: "Email", secret: false },
+  { re: /^(email[_-]?password|mail[_-]?password)$/i, label: "Email password", secret: true },
+  { re: /^(cookies?|cookie[_-]?data|cookie[_-]?string)$/i, label: "Cookies", secret: true },
+  { re: /^(secret[_-]?answer|recovery|reserve|backup[_-]?codes?|recovery[_-]?codes?)$/i, label: "Recovery", secret: true },
+  { re: /^(two[_-]?factor|2fa|mafile|ma[_-]?file|totp|otp[_-]?secret|shared[_-]?secret)$/i, label: "2FA / .maFile", secret: true },
+  { re: /^(token|auth[_-]?token|access[_-]?token|session)$/i, label: "Token", secret: true },
+  { re: /^(phone|phone[_-]?number|number)$/i, label: "Phone", secret: true },
+];
+
+function scanCredentials(obj: unknown, out: Map<string, DeliveredField>): void {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return;
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    if (typeof value !== "string" && typeof value !== "number") continue;
+    const str = String(value).trim();
+    if (!str) continue;
+    const rule = CRED_RULES.find((r) => r.re.test(key));
+    if (rule && !out.has(rule.label)) out.set(rule.label, { label: rule.label, value: str, secret: rule.secret });
   }
-  return lines.join("\n");
+}
+
+function extractCredentials(res: LztPurchaseResponse): DeliveredField[] {
+  const item = res.item;
+  const out = new Map<string, DeliveredField>();
+  // Only look at the credential-bearing sub-objects, never the whole response.
+  scanCredentials(item?.loginData, out);
+  scanCredentials(item, out);
+  const known = ["Email access", "Login", "Password", "Email", "Email password", "Cookies", "Recovery", "2FA / .maFile", "Token", "Phone"];
+  return [...out.values()].sort((a, b) => known.indexOf(a.label) - known.indexOf(b.label));
 }
 
 /** LZT implementation of the Supplier interface. */
@@ -195,11 +239,13 @@ export class LztSupplier implements Supplier {
 
   async purchase(supplierItemId: string, expectedCost: number): Promise<SupplierPurchaseResult> {
     const res = await lztMarket.fastBuy(supplierItemId, expectedCost);
-    return {
-      supplierItemId,
-      credentials: extractCredentials(res),
-      raw: res,
-    };
+    const fields = extractCredentials(res);
+    if (fields.length === 0) {
+      // We purchased successfully but couldn't recognise any credential field.
+      // Never dump the raw response — fall back to manual delivery instead.
+      throw new Error("purchased but no recognizable credentials in response");
+    }
+    return { supplierItemId, fields };
   }
 
   async getBalance(): Promise<number | null> {

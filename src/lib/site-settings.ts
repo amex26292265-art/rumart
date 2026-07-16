@@ -13,9 +13,9 @@ export const SITE_SETTING_KEYS = [
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[number];
 
 const DEFAULTS: Record<SiteSettingKey, string> = {
-  telegramHandle: "rumart_support",
+  telegramHandle: "rumartxyz",
   supportNote:
-    "If automated delivery didn’t complete, message us on Telegram with your order reference and we’ll deliver it manually right away.",
+    "We have received your payment successfully. Your order is waiting for manual fulfillment because it could not be completed automatically. Please contact our support on Telegram and we’ll deliver it right away.",
   brandTagline: "Instant, automated delivery of premium digital goods.",
 };
 

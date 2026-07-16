@@ -32,12 +32,21 @@ export interface SupplierQuery {
   page?: number;
 }
 
+/** A single labelled credential shown to the customer (never supplier data). */
+export interface DeliveredField {
+  label: string; // e.g. "Login", "Password", "Cookies", "Email"
+  value: string;
+  secret?: boolean; // blur by default in the UI
+}
+
 /** Result of a purchase attempt against the supplier. */
 export interface SupplierPurchaseResult {
   supplierItemId: string;
-  /** Human-readable credential payload to encrypt & deliver. */
-  credentials: string;
-  raw?: unknown;
+  /**
+   * Sanitized, customer-facing credential fields only. Must NEVER contain
+   * supplier/seller/buyer data, internal IDs, raw JSON, or system metadata.
+   */
+  fields: DeliveredField[];
 }
 
 export interface Supplier {
