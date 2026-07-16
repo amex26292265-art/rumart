@@ -159,19 +159,36 @@ export class LztMarketService {
   }
 
   /**
-   * Spendable balance in USD. When the account currency is USD, the top-level
-   * `balance` field is already the USD amount (e.g. "4.32"); `convertedBalance`
-   * is a conversion into another unit and must NOT be used here. Returns null
-   * when unavailable.
+   * Total spendable balance in USD for buying accounts. LZT keeps a main
+   * `balance` PLUS separate sub-balances in `balances[]` — notably the
+   * dedicated "Balance for buying accounts", which fast-buy also spends from.
+   * We sum them so a purchase we can actually afford is never pre-emptively
+   * rejected. `convertedBalance` is a conversion into another unit and must NOT
+   * be used. Returns null only when nothing usable is found.
    */
   async balanceUsd(): Promise<number | null> {
     const res = (await this.me()) as { user?: Record<string, unknown> } | Record<string, unknown>;
     const u = ((res as { user?: Record<string, unknown> }).user ?? res) as Record<string, unknown>;
-    if (u.currency === "usd") {
-      const b = typeof u.balance === "number" ? u.balance : typeof u.balance === "string" ? parseFloat(u.balance) : NaN;
-      if (Number.isFinite(b)) return b;
+    const toNum = (v: unknown): number =>
+      typeof v === "number" ? v : typeof v === "string" ? parseFloat(v) : NaN;
+
+    let total = 0;
+    let found = false;
+    const main = toNum(u.balance);
+    if (Number.isFinite(main)) {
+      total += main;
+      found = true;
     }
-    return null;
+    if (Array.isArray(u.balances)) {
+      for (const b of u.balances as Record<string, unknown>[]) {
+        const v = toNum(b.balance);
+        if (Number.isFinite(v)) {
+          total += v;
+          found = true;
+        }
+      }
+    }
+    return found ? total : null;
   }
 }
 

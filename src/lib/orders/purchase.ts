@@ -58,6 +58,8 @@ export async function purchaseProduct(userId: string, productId: string): Promis
   // them (with the Telegram contact) and alert every admin.
   const createPending = async (reason: string): Promise<string> => {
     const reference = orderReference();
+    // Always log the real reason server-side (visible in `wrangler tail`).
+    console.error(`[orders] ${reference} pending manual fulfillment: ${reason}`);
     await prisma.order.create({
       data: {
         reference,
@@ -73,22 +75,26 @@ export async function purchaseProduct(userId: string, productId: string): Promis
     });
     try {
       const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
-      await prisma.notification.createMany({
-        data: [
-          {
-            userId,
-            title: `Order ${reference} — pending manual delivery`,
-            body: "Your payment is confirmed. Contact us on Telegram with your order reference and we’ll deliver it right away.",
-          },
-          ...admins
-            .filter((a) => a.id !== userId)
-            .map((a) => ({
-              userId: a.id,
-              title: `⚠ Manual fulfillment needed: ${reference}`,
-              body: `${product.title} — ${reason}. Deliver manually and mark the order completed.`,
-            })),
-        ],
-      });
+      // Customer-facing notification (only if the buyer is not themselves an admin).
+      const data = [] as { userId: string; title: string; body: string }[];
+      const buyerIsAdmin = admins.some((a) => a.id === userId);
+      if (!buyerIsAdmin) {
+        data.push({
+          userId,
+          title: `Order ${reference} — pending manual delivery`,
+          body: "Your payment is confirmed. Contact us on Telegram with your order reference and we’ll deliver it right away.",
+        });
+      }
+      // Admin reason — sent to EVERY admin (including the buyer if they are one,
+      // so a solo admin-run store still sees exactly why it pended).
+      for (const a of admins) {
+        data.push({
+          userId: a.id,
+          title: `⚠ Manual fulfillment needed: ${reference}`,
+          body: `${product.title} — ${reason}. Deliver manually and mark the order completed.`,
+        });
+      }
+      await prisma.notification.createMany({ data });
     } catch (err) {
       console.error(`[orders] failed to create notifications for ${reference}:`, err);
     }
