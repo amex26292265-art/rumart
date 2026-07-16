@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getSupplier } from "@/lib/suppliers/registry";
 import { encryptSecret } from "@/lib/crypto";
 import { orderReference } from "@/lib/utils";
+import { validatePromo } from "@/lib/promo";
 
 export type PurchaseOutcome =
   | { ok: true; reference: string } // delivered instantly
@@ -11,11 +12,16 @@ export type PurchaseOutcome =
 
 /**
  * Wallet-based automated buy pipeline (server-side only):
- *   check balance → deduct → re-check availability → purchase upstream →
- *   encrypt → deliver. On any failure after deduction we REFUND the wallet, so
- *   the customer is never charged for something they didn't receive.
+ *   validate promo → check balance → deduct → re-check availability →
+ *   purchase upstream → encrypt → deliver. On any failure after deduction we
+ *   REFUND the wallet, so the customer is never charged for something they
+ *   didn't receive.
  */
-export async function purchaseProduct(userId: string, productId: string): Promise<PurchaseOutcome> {
+export async function purchaseProduct(
+  userId: string,
+  productId: string,
+  promoCode?: string,
+): Promise<PurchaseOutcome> {
   const [product, user] = await Promise.all([
     prisma.product.findUnique({ where: { id: productId }, include: { supplier: true } }),
     prisma.user.findUnique({ where: { id: userId } }),
@@ -25,12 +31,27 @@ export async function purchaseProduct(userId: string, productId: string): Promis
     return { ok: false, error: "This item is no longer available." };
   }
 
+  // Apply a promo code if given. An invalid code is ignored (full price) rather
+  // than blocking the purchase; the UI validates before this call.
+  let discount = 0;
+  let promoId: string | null = null;
+  let promoLabel: string | null = null;
+  if (promoCode && promoCode.trim()) {
+    const res = await validatePromo(promoCode, userId, product.price);
+    if (res.ok) {
+      discount = res.discount;
+      promoId = res.codeId;
+      promoLabel = res.code;
+    }
+  }
+  const charge = Math.max(0, Math.round((product.price - discount) * 100) / 100);
+
   // Not enough store credit → send them to top up (with the exact amount).
-  if (user.walletBalance < product.price) {
+  if (user.walletBalance < charge) {
     return {
       ok: false,
       needTopup: true,
-      amount: product.price,
+      amount: charge,
       balance: user.walletBalance,
       error: "Not enough balance. Add funds to your wallet to complete this purchase.",
     };
@@ -38,21 +59,35 @@ export async function purchaseProduct(userId: string, productId: string): Promis
 
   // Atomically reserve the funds (guards against double-spend / race).
   const reserved = await prisma.user.updateMany({
-    where: { id: userId, walletBalance: { gte: product.price } },
-    data: { walletBalance: { decrement: product.price } },
+    where: { id: userId, walletBalance: { gte: charge } },
+    data: { walletBalance: { decrement: charge } },
   });
   if (reserved.count === 0) {
     return {
       ok: false,
       needTopup: true,
-      amount: product.price,
+      amount: charge,
       balance: user.walletBalance,
       error: "Not enough balance. Add funds to your wallet to complete this purchase.",
     };
   }
 
+  // Record the redemption now that funds are reserved (before delivery), so
+  // usage limits hold even if delivery falls to manual. Best-effort.
+  const recordPromo = async (reference: string) => {
+    if (!promoId || discount <= 0) return;
+    try {
+      await prisma.$transaction([
+        prisma.promoRedemption.create({ data: { codeId: promoId, userId, orderRef: reference, discount } }),
+        prisma.promoCode.update({ where: { id: promoId }, data: { uses: { increment: 1 } } }),
+      ]);
+    } catch (err) {
+      console.error(`[promo] failed to record redemption for ${reference}:`, err);
+    }
+  };
+
   const refund = () =>
-    prisma.user.update({ where: { id: userId }, data: { walletBalance: { increment: product.price } } });
+    prisma.user.update({ where: { id: userId }, data: { walletBalance: { increment: charge } } });
 
   // Paid order awaiting manual delivery: keep the customer's payment, notify
   // them (with the Telegram contact) and alert every admin.
@@ -67,12 +102,13 @@ export async function purchaseProduct(userId: string, productId: string): Promis
         status: "pending",
         paymentMethod: "wallet",
         currency: product.currency,
-        total: product.price,
+        total: charge,
         cost: product.cost,
-        profit: product.price - product.cost,
-        items: { create: { productId: product.id, title: product.title, price: product.price, cost: product.cost } },
+        profit: charge - product.cost,
+        items: { create: { productId: product.id, title: product.title, price: charge, cost: product.cost } },
       },
     });
+    await recordPromo(reference);
     try {
       const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
       // Customer-facing notification (only if the buyer is not themselves an admin).
@@ -166,10 +202,10 @@ export async function purchaseProduct(userId: string, productId: string): Promis
       status: "completed",
       paymentMethod: "wallet",
       currency: product.currency,
-      total: product.price,
+      total: charge,
       cost: product.cost,
-      profit: product.price - product.cost,
-      items: { create: { productId: product.id, title: product.title, price: product.price, cost: product.cost } },
+      profit: charge - product.cost,
+      items: { create: { productId: product.id, title: product.title, price: charge, cost: product.cost } },
       credential: {
         create: {
           productTitle: product.title,
@@ -179,6 +215,8 @@ export async function purchaseProduct(userId: string, productId: string): Promis
       },
     },
   });
+  await recordPromo(reference);
+  void promoLabel; // (label reserved for future order display)
 
   await prisma.product.update({ where: { id: product.id }, data: { status: "sold" } });
   return { ok: true, reference };

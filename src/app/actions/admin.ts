@@ -232,6 +232,45 @@ export async function refundOrder(fd: FormData): Promise<{ ok: true } | { ok: fa
   return { ok: true };
 }
 
+// ─── Promo codes ───────────────────────────────────────────────────────────
+export async function savePromoCode(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = str(fd, "code").toUpperCase().replace(/\s+/g, "");
+  if (!/^[A-Z0-9_-]{3,32}$/.test(code)) return { ok: false, error: "Code must be 3–32 letters/numbers." };
+  const type = str(fd, "type") === "flat" ? "flat" : "percent";
+  const value = num(fd, "value");
+  if (value == null || value <= 0) return { ok: false, error: "Enter a positive discount value." };
+  if (type === "percent" && value > 100) return { ok: false, error: "Percent discount can’t exceed 100." };
+
+  const data = {
+    code,
+    type,
+    value,
+    maxUses: fd.get("maxUses") ? Math.round(num(fd, "maxUses") ?? 0) : null,
+    perUser: Math.max(1, Math.round(num(fd, "perUser") ?? 1)),
+    minOrder: fd.get("minOrder") ? num(fd, "minOrder") : null,
+    maxDiscount: fd.get("maxDiscount") ? num(fd, "maxDiscount") : null,
+    active: bool(fd, "active"),
+  };
+  await prisma.promoCode.upsert({ where: { code }, update: data, create: data });
+  revalidatePath("/admin/promos");
+  return { ok: true };
+}
+
+export async function togglePromoCode(fd: FormData) {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const p = await prisma.promoCode.findUnique({ where: { id } });
+  if (p) await prisma.promoCode.update({ where: { id }, data: { active: !p.active } });
+  revalidatePath("/admin/promos");
+}
+
+export async function deletePromoCode(fd: FormData) {
+  await requireAdmin();
+  await prisma.promoCode.delete({ where: { id: str(fd, "id") } });
+  revalidatePath("/admin/promos");
+}
+
 /** Save editable site settings (Telegram handle, support note, tagline). */
 export async function saveSiteSettings(fd: FormData) {
   await requireAdmin();

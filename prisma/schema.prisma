@@ -303,3 +303,34 @@ model Setting {
   key   String @id
   value String
 }
+
+// ─── Promo / discount codes ────────────────────────────────────────────────
+model PromoCode {
+  id        String   @id @default(cuid())
+  code      String   @unique // stored uppercase
+  type      String   @default("percent") // percent | flat
+  value     Float // 10 => 10% off (percent) or $10 off (flat)
+  maxUses   Int? // total redemptions allowed (null = unlimited)
+  uses      Int      @default(0)
+  perUser   Int      @default(1) // redemptions allowed per user
+  minOrder  Float? // minimum order total to qualify
+  maxDiscount Float? // cap the discount amount (for percent codes)
+  expiresAt DateTime?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions PromoRedemption[]
+}
+
+model PromoRedemption {
+  id        String    @id @default(cuid())
+  codeId    String
+  promo     PromoCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  userId    String
+  orderRef  String?
+  discount  Float // discount amount applied
+  createdAt DateTime  @default(now())
+
+  @@index([codeId, userId])
+}

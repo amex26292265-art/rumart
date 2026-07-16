@@ -9,6 +9,7 @@ import {
   Package,
   Receipt,
   Settings,
+  Ticket,
   type LucideIcon,
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/pricing", label: "Pricing", icon: Tags },
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/orders", label: "Orders", icon: Receipt },
+  { href: "/admin/promos", label: "Promo codes", icon: Ticket },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
