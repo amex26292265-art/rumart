@@ -23,9 +23,10 @@ const schema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().default("http://localhost:3000"),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().optional(),
-  // Cryptomus crypto payment gateway (optional until you add keys).
-  CRYPTOMUS_MERCHANT_ID: z.string().default(""),
-  CRYPTOMUS_PAYMENT_KEY: z.string().default(""),
+  // NOWPayments crypto payment gateway (optional until you add keys).
+  NOWPAYMENTS_API_KEY: z.string().default(""),
+  NOWPAYMENTS_IPN_SECRET: z.string().default(""),
+  NOWPAYMENTS_PUBLIC_KEY: z.string().default(""),
 });
 
 type Env = z.infer<typeof schema>;
@@ -41,8 +42,9 @@ const source = {
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
-  CRYPTOMUS_MERCHANT_ID: process.env.CRYPTOMUS_MERCHANT_ID,
-  CRYPTOMUS_PAYMENT_KEY: process.env.CRYPTOMUS_PAYMENT_KEY,
+  NOWPAYMENTS_API_KEY: process.env.NOWPAYMENTS_API_KEY,
+  NOWPAYMENTS_IPN_SECRET: process.env.NOWPAYMENTS_IPN_SECRET,
+  NOWPAYMENTS_PUBLIC_KEY: process.env.NOWPAYMENTS_PUBLIC_KEY,
 };
 
 const parsed = schema.safeParse(source);
@@ -63,8 +65,9 @@ const fallback: Env = {
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
-  CRYPTOMUS_MERCHANT_ID: process.env.CRYPTOMUS_MERCHANT_ID ?? "",
-  CRYPTOMUS_PAYMENT_KEY: process.env.CRYPTOMUS_PAYMENT_KEY ?? "",
+  NOWPAYMENTS_API_KEY: process.env.NOWPAYMENTS_API_KEY ?? "",
+  NOWPAYMENTS_IPN_SECRET: process.env.NOWPAYMENTS_IPN_SECRET ?? "",
+  NOWPAYMENTS_PUBLIC_KEY: process.env.NOWPAYMENTS_PUBLIC_KEY ?? "",
 };
 
 export const env: Env = parsed.success ? parsed.data : fallback;
@@ -77,6 +80,8 @@ if (!parsed.success && process.env.NODE_ENV !== "production") {
 /** True when a real LZT token is configured — otherwise the catalog stays empty. */
 export const isSupplierConfigured = env.LZT_API_TOKEN.length > 0;
 
-/** True when Cryptomus keys are present — otherwise crypto top-up is disabled. */
+/** True when NOWPayments keys are present — otherwise crypto top-up is disabled.
+ *  IPN secret is required so we can verify callbacks; without it we refuse to
+ *  credit wallets. */
 export const isPaymentsConfigured =
-  env.CRYPTOMUS_MERCHANT_ID.length > 0 && env.CRYPTOMUS_PAYMENT_KEY.length > 0;
+  env.NOWPAYMENTS_API_KEY.length > 0 && env.NOWPAYMENTS_IPN_SECRET.length > 0;

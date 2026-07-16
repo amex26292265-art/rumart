@@ -54,18 +54,19 @@ time** (set it as a build variable too — it's inlined into the client bundle).
 | `LZT_API_BASE` / `LZT_API_TOKEN` | Supplier |
 | `NEXT_PUBLIC_SITE_URL` | `https://rumart.xyz` (build + runtime) |
 | `SITE_CURRENCY` | `USD` |
-| `CRYPTOMUS_MERCHANT_ID` / `CRYPTOMUS_PAYMENT_KEY` | Crypto payments |
+| `NOWPAYMENTS_API_KEY` / `NOWPAYMENTS_IPN_SECRET` / `NOWPAYMENTS_PUBLIC_KEY` | Crypto payments |
 
 Node version: set `NODE_VERSION = 20` (or newer) in the build variables.
 
-## 4. Deploy, domain, Cryptomus
+## 4. Deploy, domain, NOWPayments
 
 1. **Deploy** — Cloudflare builds on Linux and publishes the Worker.
 2. **Domain** — Workers project → **Settings → Domains & Routes → Add custom
    domain** → `rumart.xyz`, then set the DNS record it shows.
-3. **Cryptomus "Confirm domain"** — works only after step 2 (the domain must be
-   live and yours). Then set the Cryptomus webhook to
-   `https://rumart.xyz/api/webhooks/cryptomus`.
+3. **NOWPayments** — in your NOWPayments dashboard → **Settings → IPN**, set the
+   IPN callback URL to `https://rumart.xyz/api/webhooks/nowpayments` and copy the
+   **IPN Secret key** into `NOWPAYMENTS_IPN_SECRET`. Get the API key from
+   **Settings → API keys**.
 
 ## Notes / fallback
 

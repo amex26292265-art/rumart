@@ -24,7 +24,7 @@ export function TopUp({ enabled }: { enabled: boolean }) {
     if (!Number.isFinite(value) || value < 1) return setError("Enter at least $1.");
     startTransition(async () => {
       const res = await createDeposit(value);
-      if (res.ok) window.location.href = res.url; // hosted Cryptomus checkout
+      if (res.ok) window.location.href = res.url; // hosted NOWPayments checkout
       else setError(res.error);
     });
   };
@@ -80,7 +80,7 @@ export function TopUp({ enabled }: { enabled: boolean }) {
 
       {!enabled ? (
         <p className="mt-3 text-center text-xs text-ink-400">
-          Crypto payments aren’t enabled yet — add your Cryptomus keys to turn this on.
+          Crypto payments aren’t enabled yet — add your NOWPayments keys to turn this on.
         </p>
       ) : (
         <motion.p
@@ -88,7 +88,8 @@ export function TopUp({ enabled }: { enabled: boolean }) {
           animate={{ opacity: 1 }}
           className="mt-3 text-center text-xs text-ink-400"
         >
-          Pay with USDT, BTC, ETH and more. Funds are added automatically once the payment is confirmed on-chain.
+          Pay with USDT (TRC20/BEP20), BTC, ETH, LTC and more. Funds are added automatically once the
+          payment is confirmed on-chain.
         </motion.p>
       )}
     </div>

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
 import { formatMoney } from "@/lib/utils";
 import { TopUp } from "./TopUp";
+import { WalletAutoRefresh } from "./WalletAutoRefresh";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Wallet" };
@@ -36,6 +37,9 @@ export default async function WalletPage({
           <CheckCircle2 className="h-4 w-4" /> Payment received — your balance updates automatically once confirmed on-chain.
         </div>
       )}
+      <WalletAutoRefresh active={Boolean(sp.paid)} />
+      {/* If a payment funds a specific purchase, the account is delivered
+          automatically — check your orders once the balance updates. */}
 
       <Reveal className="mt-6 grid gap-6 sm:grid-cols-[1fr_1.1fr]">
         {/* Balance card */}
@@ -64,7 +68,17 @@ export default async function WalletPage({
                   <td className="px-5 py-3 font-medium text-ink-950">{formatMoney(d.amount, d.currency)}</td>
                   <td className="px-5 py-3 text-ink-400">{d.provider}</td>
                   <td className="px-5 py-3 text-right">
-                    <Badge tone={d.status === "paid" ? "success" : d.status === "pending" ? "warning" : "neutral"}>
+                    <Badge
+                      tone={
+                        d.status === "paid"
+                          ? "success"
+                          : d.status === "pending"
+                            ? "warning"
+                            : d.status === "partial"
+                              ? "warning"
+                              : "neutral"
+                      }
+                    >
                       {d.status}
                     </Badge>
                   </td>

@@ -46,14 +46,30 @@ model Deposit {
   id         String   @id @default(cuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount     Float // requested top-up amount, in site currency
-  currency   String   @default("USD")
-  provider   String   @default("cryptomus")
-  providerId String? // gateway invoice uuid
-  status     String   @default("pending") // pending | paid | failed | cancelled
+  amount     Float // requested top-up amount, in price currency (price_amount)
+  currency   String   @default("USD") // price_currency
+  provider   String   @default("nowpayments")
+  providerId String? // gateway invoice id (NOWPayments invoice_id)
+  status     String   @default("pending") // pending | paid | partial | failed | cancelled
   credited   Boolean  @default(false) // guards against double-crediting
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  // NOWPayments payment details (populated from the IPN callback).
+  paymentId    String? // NOWPayments payment_id
+  payStatus    String? // raw NOWPayments payment_status
+  payCurrency  String? // coin actually used (e.g. usdttrc20, btc)
+  payAmount    Float? // expected amount in the pay currency
+  actuallyPaid Float? // amount actually received
+  payAddress   String? // deposit address shown to the customer
+  txHash       String? // on-chain payin hash
+
+  // Optional: buy this product automatically once the payment confirms
+  // (seamless buy → pay → deliver). Null for a plain wallet top-up.
+  productId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paymentId])
 }
 
 // ─── Supplier abstraction ──────────────────────────────────────────────────

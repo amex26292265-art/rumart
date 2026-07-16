@@ -18,7 +18,7 @@
   },
   // Non-secret runtime config, committed so `wrangler deploy` never wipes it.
   // SECRETS (DATABASE_URL, AUTH_SECRET, SECRETS_ENCRYPTION_KEY, LZT_API_TOKEN,
-  // CRYPTOMUS_*, ADMIN_*) must be set as encrypted Secrets in the Cloudflare
+  // NOWPAYMENTS_*, ADMIN_*) must be set as encrypted Secrets in the Cloudflare
   // dashboard — those are preserved across deploys and never committed.
   // NOTE: DATABASE_URL must be the Prisma Accelerate URL (prisma://...), NOT
   // the direct Neon postgres:// URL — the client is generated --no-engine and

@@ -49,8 +49,9 @@ Set these in `.env` locally **and** in Vercel → Project → Settings → Envir
 | `LZT_API_TOKEN` | LZT token with `market` scope |
 | `NEXT_PUBLIC_SITE_URL` | `https://rumart.xyz` |
 | `SITE_CURRENCY` | `USD` |
-| `CRYPTOMUS_MERCHANT_ID` | UUID from cryptomus.com → Settings → Merchant |
-| `CRYPTOMUS_PAYMENT_KEY` | Payment API key from Cryptomus |
+| `NOWPAYMENTS_API_KEY` | nowpayments.io → Settings → API keys |
+| `NOWPAYMENTS_IPN_SECRET` | nowpayments.io → Settings → IPN → IPN Secret key |
+| `NOWPAYMENTS_PUBLIC_KEY` | nowpayments.io → Store settings (public key) |
 | `CRON_SECRET` | Optional — protects `/api/cron/sync` (Vercel Cron sends it automatically) |
 
 ## 4. Deploy to Vercel
@@ -71,15 +72,19 @@ admin) is already there after step 2 — no extra migration step.
 Vercel → Project → **Settings → Domains** → add `rumart.xyz` and follow the DNS
 instructions at your registrar. Then set `NEXT_PUBLIC_SITE_URL=https://rumart.xyz`.
 
-## 6. Turn on crypto payments (Cryptomus)
+## 6. Turn on crypto payments (NOWPayments)
 
-1. Set `CRYPTOMUS_MERCHANT_ID` and `CRYPTOMUS_PAYMENT_KEY` in Vercel.
-2. In Cryptomus → **Settings → API**, set the webhook / callback URL to:
+1. Set `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET` and
+   `NOWPAYMENTS_PUBLIC_KEY`.
+2. In NOWPayments → **Settings → IPN**, set the callback URL to:
    ```
-   https://rumart.xyz/api/webhooks/cryptomus
+   https://rumart.xyz/api/webhooks/nowpayments
    ```
-3. Redeploy. The **Wallet** page now accepts crypto top-ups; balances are
-   credited automatically once Cryptomus confirms the payment on-chain.
+   and copy the **IPN Secret key** into `NOWPAYMENTS_IPN_SECRET`.
+3. Redeploy. The **Wallet** page now accepts crypto top-ups (USDT TRC20/BEP20,
+   BTC, ETH, LTC and more); balances are credited automatically once
+   NOWPayments confirms the payment on-chain, and product-linked payments are
+   delivered automatically.
 
 ## 7. Automatic sync
 
