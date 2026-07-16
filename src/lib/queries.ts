@@ -39,13 +39,22 @@ export async function getAllCategories() {
 }
 
 export async function getTrending(limit = 8): Promise<ProductCardData[]> {
-  const rows = await prisma.product.findMany({
-    where: { status: "active" },
+  // Lead the homepage with Steam accounts (flagship category, and they carry
+  // real game-cover images). Top up with other recent listings if needed.
+  const steam = await prisma.product.findMany({
+    where: { status: "active", category: { slug: "steam" } },
     orderBy: [{ createdAt: "desc" }],
     take: limit,
     include: { category: true },
   });
-  return rows.map(toCard);
+  if (steam.length >= limit) return steam.map(toCard);
+  const rest = await prisma.product.findMany({
+    where: { status: "active", NOT: { category: { slug: "steam" } } },
+    orderBy: { createdAt: "desc" },
+    take: limit - steam.length,
+    include: { category: true },
+  });
+  return [...steam, ...rest].map(toCard);
 }
 
 export async function getRecent(limit = 8): Promise<ProductCardData[]> {
