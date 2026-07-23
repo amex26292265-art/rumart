@@ -6,9 +6,10 @@
   // bcryptjs run on Workers. Date must be >= 2024-09-23 for nodejs_compat.
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
-  // Never delete dashboard-added plain-text vars on deploy. (Encrypted
-  // Secrets always survive deploys; this protects Text-type vars too.)
-  "keep_vars": true,
+  // keep_vars false so stale dashboard plain vars (e.g. AUTH_URL) cannot
+  // survive deploys and break custom domains. All plain vars live in `vars`
+  // below; encrypted Secrets always survive either way.
+  "keep_vars": false,
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -28,6 +29,8 @@
   // + trustHost in auth.ts use the request Host instead.
   // SITE_PUBLIC=false keeps rumart.wtf / workers.dev on the coming-soon gate
   // until launch. Unlock with ?preview=<SITE_PREVIEW_SECRET> (secret).
+  // Note: privacy gate runs in Edge middleware (src/middleware.ts) — OpenNext
+  // Cloudflare does not support Node.js proxy.ts.
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://rumart.wtf",
     "AUTH_TRUST_HOST": "true",

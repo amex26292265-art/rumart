@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Network boundary (Next.js 16 `proxy` replaces middleware).
+ * Edge middleware (required on Cloudflare OpenNext — Node `proxy.ts` is unsupported).
  *
  * When SITE_PUBLIC is not "true", the marketplace stays private: every page
  * rewrites to /coming-soon unless the visitor unlocked preview with
@@ -17,6 +17,7 @@ function isBypassPath(pathname: string): boolean {
   if (pathname.startsWith("/_next/")) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   if (pathname.startsWith("/api/cron/")) return true;
+  if (pathname.startsWith("/api/auth/")) return true;
   if (pathname.startsWith("/api/admin/migrate")) return true;
   if (pathname.startsWith("/api/admin/reset-password")) return true;
   if (pathname === "/favicon.ico" || pathname === "/icon.svg" || pathname === "/robots.txt") return true;
@@ -24,7 +25,7 @@ function isBypassPath(pathname: string): boolean {
   return false;
 }
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   if (process.env.SITE_PUBLIC === "true") {
     return NextResponse.next();
   }
@@ -63,5 +64,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // Include `/` explicitly — the catch-all alone often skips the site root.
+  matcher: ["/", "/((?!_next/static|_next/image).*)"],
 };

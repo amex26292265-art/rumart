@@ -62,3 +62,4 @@ secrets-bulk.json
 .migrate-secret
 .secrets.local.json
 .admin-credentials.local
+.preview-url.local

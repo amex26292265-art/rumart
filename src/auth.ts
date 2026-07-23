@@ -6,7 +6,7 @@ import { verifyPassword, needsRehash, hashPassword } from "@/lib/password";
 /**
  * Auth.js v5, JWT sessions, credentials provider. Roles are carried in the JWT
  * so route protection needs no DB round-trip. Admin routes are guarded in
- * proxy.ts (middleware) and re-checked in server actions.
+ * middleware.ts and re-checked in server actions.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // Trust the request Host so custom domains (e.g. rumart.wtf) work without a
