@@ -7,6 +7,7 @@ import type {
 } from "@/lib/suppliers/types";
 import { lztMarket, type LztRawItem, type LztPurchaseResponse } from "./service";
 import { buildAccountInfo } from "./account-info";
+import { buildMarketplaceTitle } from "./titles";
 
 /**
  * The category slugs the LZT Market API actually accepts at /market/{slug}.
@@ -124,7 +125,24 @@ function sanitizeSupplier(text: string): string {
 function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing {
   const info = buildAccountInfo(raw);
   const rawTitle = raw.title_en || raw.title || `${supplierCategory} account #${raw.item_id}`;
-  const title = sanitizeSupplier(rawTitle) || `${supplierCategory || "Digital"} account`;
+  const sanitizedFallback = sanitizeSupplier(rawTitle);
+  const title = buildMarketplaceTitle(
+    supplierCategory,
+    {
+      level: info.level,
+      emailNative: info.emailNative,
+      vac: info.vac,
+      personal: info.personal,
+      sda: info.sda,
+      warranty: info.warranty,
+      country: info.country,
+      games: info.games,
+      tags: info.tags,
+      stats: info.stats,
+      origin: info.origin,
+    },
+    sanitizedFallback,
+  );
   return {
     images: extractImages(raw),
     supplierItemId: String(raw.item_id),

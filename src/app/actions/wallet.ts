@@ -18,6 +18,10 @@ export async function createDeposit(amount: number, productId?: string): Promise
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) return { ok: false, error: "Please sign in first." };
 
+  const { rateLimit } = await import("@/lib/rate-limit");
+  const limited = rateLimit(`deposit:${userId}`, 8, 60_000);
+  if (!limited.ok) return { ok: false, error: `Too many deposit attempts. Retry in ${limited.retryAfterSec}s.` };
+
   if (!nowPayments.isConfigured()) {
     return { ok: false, error: "Crypto payments aren’t enabled yet. Please try again later." };
   }

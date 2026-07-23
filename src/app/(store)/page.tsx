@@ -1,52 +1,65 @@
 import Link from "next/link";
+import { Shield, Zap, Lock, BadgeCheck, Sparkles, Globe2 } from "lucide-react";
 import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Counter } from "@/components/ui/counter";
 import { Reveal, Stagger, StaggerItem } from "@/components/ui/motion";
 import { Hero } from "@/components/store/Hero";
-import { CategoryGrid } from "@/components/store/CategoryGrid";
+import { CategoryBanners } from "@/components/store/CategoryGrid";
 import { SectionHeader } from "@/components/store/SectionHeader";
 import { HowItWorks } from "@/components/store/HowItWorks";
 import { Faq } from "@/components/store/Faq";
 import { Newsletter } from "@/components/store/Newsletter";
 import { ProductCard } from "@/components/store/ProductCard";
-import { getFeaturedCategories, getTrending, getStoreStats } from "@/lib/queries";
+import { getFeaturedCategories, getTrending, getStoreStats, getNewest, getAiProducts } from "@/lib/queries";
+import { getSiteSettings } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
+const WHY = [
+  { icon: Zap, title: "Instant delivery", text: "Auto-fulfillment buys upstream and unlocks credentials in seconds." },
+  { icon: Lock, title: "Encrypted vault", text: "AES-256-GCM at rest. Credentials decrypt only for the buyer." },
+  { icon: BadgeCheck, title: "Live inventory", text: "No fake listings — stock syncs continuously from verified sources." },
+  { icon: Globe2, title: "Crypto wallet", text: "Top up with USDT, BTC, ETH and more. Buy without friction." },
+];
+
+const SECURITY = [
+  { title: "Wallet isolation", text: "Funds reserved atomically — no double-spend races." },
+  { title: "HMAC payment verification", text: "Crypto deposits verified with timing-safe signatures." },
+  { title: "Supplier privacy", text: "Upstream sources are never exposed to customers." },
+];
+
 export default async function HomePage() {
-  const [categories, trending, stats] = await Promise.all([
+  const [categories, trending, newest, aiProducts, stats, settings] = await Promise.all([
     getFeaturedCategories(),
     getTrending(8),
+    getNewest(8),
+    getAiProducts(8),
     getStoreStats(),
+    getSiteSettings(),
   ]);
+
+  const bannerCats = categories.map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    icon: c.icon,
+    accent: c.accent,
+    count: c._count.products,
+    description: c.description,
+  }));
 
   return (
     <>
       <Hero />
 
-      {/* Categories */}
-      <Container className="py-4">
-        <SectionHeader title="Browse categories" subtitle="Jump straight to what you need" href="/categories" />
-        <CategoryGrid
-          categories={categories.map((c) => ({
-            slug: c.slug,
-            name: c.name,
-            icon: c.icon,
-            accent: c.accent,
-            count: c._count.products,
-          }))}
-        />
+      <Container className="py-6">
+        <SectionHeader title="Popular categories" subtitle="Cinematic browsing across games and digital goods" href="/categories" />
+        <CategoryBanners categories={bannerCats.slice(0, 6)} />
       </Container>
 
-      {/* Trending / recently added — honest empty state until sync imports real data */}
       <Container className="py-14">
-        <SectionHeader
-          title="Trending now"
-          subtitle="Freshly added, verified listings"
-          href="/marketplace"
-        />
+        <SectionHeader title="Trending now" subtitle="Most viewed live listings" href="/marketplace" />
         {trending.length > 0 ? (
           <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
             {trending.map((p) => (
@@ -58,7 +71,7 @@ export default async function HomePage() {
         ) : (
           <EmptyState
             title="No listings yet"
-            description="The catalog fills automatically as soon as synchronization imports live inventory from the supplier. Nothing here is faked — real stock only."
+            description="The catalog fills automatically as soon as synchronization imports live inventory. Nothing here is faked."
             action={
               <Link href="/marketplace">
                 <Button variant="outline">Explore the marketplace</Button>
@@ -68,41 +81,123 @@ export default async function HomePage() {
         )}
       </Container>
 
-      {/* How it works */}
       <Container className="py-6">
-        <SectionHeader title="How it works" subtitle="From click to credentials in seconds" />
+        <SectionHeader title="Newest arrivals" subtitle="Fresh inventory just synced" href="/marketplace?sort=newest" />
+        {newest.length > 0 ? (
+          <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
+            {newest.map((p) => (
+              <StaggerItem key={p.id}>
+                <ProductCard product={p} />
+              </StaggerItem>
+            ))}
+          </Stagger>
+        ) : (
+          <EmptyState title="Waiting for sync" description="Newest arrivals appear here after the next catalog refresh." />
+        )}
+      </Container>
+
+      {/* AI marketplace strip */}
+      <section className="relative my-10 overflow-hidden border-y border-mist-300 bg-mist-50 py-16">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_left,_rgba(139,92,246,0.2),_transparent_50%)]" />
+        <Container className="relative">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-accent-400">
+                <Sparkles className="h-3.5 w-3.5" /> AI & creative tools
+              </span>
+              <h2 className="mt-2 font-display text-3xl font-bold text-ink-950">AI subscriptions marketplace</h2>
+              <p className="mt-1 text-sm text-ink-500">ChatGPT, Claude, Cursor, Midjourney and more — instant access.</p>
+            </div>
+            <Link href="/marketplace?category=ai">
+              <Button variant="outline">View AI catalog</Button>
+            </Link>
+          </div>
+          {aiProducts.length > 0 ? (
+            <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
+              {aiProducts.map((p) => (
+                <StaggerItem key={p.id}>
+                  <ProductCard product={p} />
+                </StaggerItem>
+              ))}
+            </Stagger>
+          ) : (
+            <div className="card grid gap-3 p-8 text-center sm:grid-cols-2 lg:grid-cols-4">
+              {["ChatGPT Plus", "Claude Pro", "Cursor Pro", "Midjourney"].map((name) => (
+                <div key={name} className="rounded-xl border border-mist-300 bg-mist-100/50 p-4">
+                  <p className="font-semibold text-ink-950">{name}</p>
+                  <p className="mt-1 text-xs text-ink-500">Coming to catalog</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Container>
+      </section>
+
+      <Container className="py-6">
+        <SectionHeader title="How it works" subtitle="From browse to credentials in three steps" />
         <HowItWorks />
       </Container>
 
-      {/* Real stats */}
-      <Container className="py-16">
+      <Container className="py-14">
+        <SectionHeader title="Why Rumart" subtitle="Built by Velexis for serious digital commerce" />
+        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
+          {WHY.map((w) => (
+            <StaggerItem key={w.title}>
+              <div className="card h-full p-5">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-500/15 text-accent-400">
+                  <w.icon className="h-5 w-5" />
+                </span>
+                <h3 className="mt-4 font-semibold text-ink-950">{w.title}</h3>
+                <p className="mt-1.5 text-sm text-ink-500">{w.text}</p>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+      </Container>
+
+      <Container className="py-6">
+        <SectionHeader title="Security first" subtitle="Enterprise controls under the hood" />
+        <Reveal>
+          <div className="card grid gap-6 p-6 sm:grid-cols-3">
+            {SECURITY.map((s) => (
+              <div key={s.title} className="flex gap-3">
+                <Shield className="mt-0.5 h-5 w-5 shrink-0 text-accent-400" />
+                <div>
+                  <h3 className="font-semibold text-ink-950">{s.title}</h3>
+                  <p className="mt-1 text-sm text-ink-500">{s.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </Container>
+
+      <Container className="py-14">
         <Reveal>
           <div className="card grid gap-6 p-8 text-center sm:grid-cols-3">
             <div>
-              <Counter value={stats.products} className="text-4xl font-semibold text-ink-950" />
+              <Counter value={stats.products} className="font-display text-4xl font-bold text-ink-950" />
               <p className="mt-1 text-sm text-ink-500">Live listings</p>
             </div>
             <div>
-              <Counter value={stats.categories} className="text-4xl font-semibold text-ink-950" />
+              <Counter value={stats.categories} className="font-display text-4xl font-bold text-ink-950" />
               <p className="mt-1 text-sm text-ink-500">Categories</p>
             </div>
             <div>
-              <Counter value={stats.completedOrders} className="text-4xl font-semibold text-ink-950" />
+              <Counter value={stats.completedOrders} className="font-display text-4xl font-bold text-ink-950" />
               <p className="mt-1 text-sm text-ink-500">Orders delivered</p>
             </div>
           </div>
         </Reveal>
       </Container>
 
-      {/* FAQ */}
       <Container className="py-6">
-        <SectionHeader title="Frequently asked" subtitle="Everything you need to know" />
+        <SectionHeader title="FAQ" subtitle="Straight answers, no marketing fluff" />
         <Faq />
       </Container>
 
-      {/* Newsletter */}
       <Container className="py-16">
-        <Newsletter />
+        <Newsletter telegramUrl={settings.telegramUrl} />
       </Container>
     </>
   );

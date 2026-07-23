@@ -25,6 +25,12 @@ async function main() {
     create: { slug: "lzt", name: "LZT Market" },
   });
 
+  await prisma.supplier.upsert({
+    where: { slug: "manual" },
+    update: {},
+    create: { slug: "manual", name: "Manual / Custom" },
+  });
+
   const categories = [
     { slug: "steam", name: "Steam", icon: "Gamepad2", accent: "#1b2838", supplierCategory: "steam", featured: true, order: 0, description: "Steam accounts with games (CS2, Rust, GTA V, PUBG), wallet balance and inventory." },
     { slug: "fortnite", name: "Fortnite", icon: "Swords", accent: "#7c3aed", supplierCategory: "fortnite", featured: true, order: 1, description: "Fortnite accounts with rare skins, V-Bucks and battle pass progress." },
@@ -45,11 +51,55 @@ async function main() {
     { slug: "instagram", name: "Instagram", icon: "AtSign", accent: "#e1306c", supplierCategory: "instagram", featured: false, order: 16, description: "Instagram accounts, aged and with followers." },
     { slug: "tiktok", name: "TikTok", icon: "Music", accent: "#111827", supplierCategory: "tiktok", featured: false, order: 17, description: "TikTok accounts across regions." },
     { slug: "giftcards", name: "Gift Cards", icon: "Gift", accent: "#16a34a", supplierCategory: "gifts", featured: false, order: 18, description: "Digital gift cards and top-ups." },
+    // AI & digital (manual catalog)
+    { slug: "ai", name: "AI Subscriptions", icon: "Sparkles", accent: "#8b5cf6", supplierCategory: null, featured: true, order: 19, description: "ChatGPT, Claude, Gemini, Cursor, Midjourney and more." },
+    { slug: "chatgpt", name: "ChatGPT", icon: "Bot", accent: "#10a37f", supplierCategory: null, featured: false, order: 20, description: "ChatGPT Plus / Team access." },
+    { slug: "claude", name: "Claude", icon: "Bot", accent: "#d97706", supplierCategory: null, featured: false, order: 21, description: "Claude Pro subscriptions." },
+    { slug: "gemini", name: "Gemini", icon: "Sparkles", accent: "#4285f4", supplierCategory: null, featured: false, order: 22, description: "Gemini Advanced." },
+    { slug: "perplexity", name: "Perplexity", icon: "Search", accent: "#22d3ee", supplierCategory: null, featured: false, order: 23, description: "Perplexity Pro." },
+    { slug: "midjourney", name: "Midjourney", icon: "Image", accent: "#a855f7", supplierCategory: null, featured: false, order: 24, description: "Midjourney image generation." },
+    { slug: "copilot", name: "GitHub Copilot", icon: "Code", accent: "#24292f", supplierCategory: null, featured: false, order: 25, description: "GitHub Copilot subscriptions." },
+    { slug: "cursor", name: "Cursor Pro", icon: "Code", accent: "#8b5cf6", supplierCategory: null, featured: false, order: 26, description: "Cursor Pro IDE access." },
+    { slug: "notion-ai", name: "Notion AI", icon: "FileText", accent: "#111827", supplierCategory: null, featured: false, order: 27, description: "Notion AI workspace tools." },
+    { slug: "grammarly", name: "Grammarly", icon: "PenLine", accent: "#15c39a", supplierCategory: null, featured: false, order: 28, description: "Grammarly Premium." },
+    { slug: "canva", name: "Canva Pro", icon: "Palette", accent: "#00c4cc", supplierCategory: null, featured: false, order: 29, description: "Canva Pro design suite." },
+    { slug: "capcut", name: "CapCut Pro", icon: "Clapperboard", accent: "#000000", supplierCategory: null, featured: false, order: 30, description: "CapCut Pro editing." },
+    { slug: "adobe", name: "Adobe", icon: "Aperture", accent: "#eb1000", supplierCategory: null, featured: false, order: 31, description: "Adobe Creative Cloud." },
+    { slug: "jetbrains", name: "JetBrains", icon: "Code2", accent: "#000000", supplierCategory: null, featured: false, order: 32, description: "JetBrains IDE licenses." },
+    { slug: "m365", name: "Microsoft 365", icon: "AppWindow", accent: "#d83b01", supplierCategory: null, featured: false, order: 33, description: "Microsoft 365 subscriptions." },
+    { slug: "netflix", name: "Netflix", icon: "Tv", accent: "#e50914", supplierCategory: null, featured: false, order: 34, description: "Netflix streaming." },
+    { slug: "spotify", name: "Spotify", icon: "Music2", accent: "#1db954", supplierCategory: null, featured: false, order: 35, description: "Spotify Premium." },
+    { slug: "disney", name: "Disney+", icon: "Tv", accent: "#113ccf", supplierCategory: null, featured: false, order: 36, description: "Disney+ streaming." },
+    { slug: "software", name: "Software", icon: "Package", accent: "#6366f1", supplierCategory: null, featured: false, order: 37, description: "Licenses, templates, and digital downloads." },
+    { slug: "hosting", name: "Hosting", icon: "Server", accent: "#0ea5e9", supplierCategory: null, featured: false, order: 38, description: "Hosting plans and VPS." },
+    { slug: "domains", name: "Domains", icon: "Globe", accent: "#14b8a6", supplierCategory: null, featured: false, order: 39, description: "Domain names and transfers." },
+    { slug: "devtools", name: "Dev Tools", icon: "Terminal", accent: "#a78bfa", supplierCategory: null, featured: false, order: 40, description: "Developer tools and SaaS." },
   ];
 
   const idBySlug: Record<string, string> = {};
   for (const c of categories) {
-    const row = await prisma.category.upsert({ where: { slug: c.slug }, update: c, create: c });
+    const row = await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: {
+        name: c.name,
+        icon: c.icon,
+        accent: c.accent,
+        supplierCategory: c.supplierCategory,
+        featured: c.featured,
+        order: c.order,
+        description: c.description,
+      },
+      create: {
+        slug: c.slug,
+        name: c.name,
+        icon: c.icon,
+        accent: c.accent,
+        supplierCategory: c.supplierCategory,
+        featured: c.featured,
+        order: c.order,
+        description: c.description,
+      },
+    });
     idBySlug[c.slug] = row.id;
   }
 

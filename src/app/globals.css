@@ -1,36 +1,43 @@
 @import "tailwindcss";
 
-/* ─── Rumart design tokens — minimal luxury: white, black, light gray ───── */
+/* ─── Rumart v2 — dark cyber marketplace ─────────────────────────────────── */
 @theme {
-  --color-ink-950: #0a0a0b;
-  --color-ink-900: #131316;
-  --color-ink-800: #1d1d21;
-  --color-ink-700: #2a2a30;
-  --color-ink-500: #6b6b74;
-  --color-ink-400: #8a8a93;
-  --color-ink-300: #b8b8bf;
+  --color-ink-950: #f5f3ff;
+  --color-ink-900: #e4e0f5;
+  --color-ink-800: #c9c3e0;
+  --color-ink-700: #a59dbc;
+  --color-ink-500: #7a7294;
+  --color-ink-400: #5e5778;
+  --color-ink-300: #3f3a55;
 
-  --color-paper: #ffffff;
-  --color-mist-50: #fafafa;
-  --color-mist-100: #f4f4f5;
-  --color-mist-200: #e9e9ec;
-  --color-mist-300: #dcdce0;
+  --color-paper: #07070b;
+  --color-mist-50: #0c0c12;
+  --color-mist-100: #12121a;
+  --color-mist-200: #1c1c28;
+  --color-mist-300: #2a2a3c;
 
-  /* Very small blue accent — used sparingly */
-  --color-accent-500: #2563eb;
-  --color-accent-600: #1d4ed8;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+  --color-accent-700: #6d28d9;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --color-neon: #c084fc;
+  --color-glow: #7c3aed;
+
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-syne), var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
   --radius-xl2: 1.25rem;
 
   --animate-marquee: marquee 30s linear infinite;
   --animate-float-slow: float-slow 9s ease-in-out infinite;
+  --animate-pulse-glow: pulse-glow 3.5s ease-in-out infinite;
+  --animate-particle: particle-drift 18s linear infinite;
 
   @keyframes float-slow {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-12px); }
+    50% { transform: translateY(-14px); }
   }
   @keyframes marquee {
     from { transform: translateX(0); }
@@ -40,14 +47,28 @@
     0% { background-position: -450px 0; }
     100% { background-position: 450px 0; }
   }
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.45; filter: blur(40px); }
+    50% { opacity: 0.85; filter: blur(56px); }
+  }
+  @keyframes particle-drift {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.7; }
+    90% { opacity: 0.5; }
+    100% { transform: translateY(-100vh) translateX(40px); opacity: 0; }
+  }
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * {
-  border-color: var(--color-mist-200);
+  border-color: var(--color-mist-300);
 }
 
 body {
@@ -58,39 +79,66 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-::selection {
-  background: color-mix(in srgb, var(--color-accent-500) 18%, transparent);
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
 }
 
-/* Thin, quiet scrollbar */
+::selection {
+  background: color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+  color: #fff;
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-mist-300) transparent;
 }
 
-/* ─── Reusable utilities ────────────────────────────────────────────────── */
 @utility card {
-  background: var(--color-paper);
-  border: 1px solid var(--color-mist-200);
+  background: color-mix(in srgb, var(--color-mist-100) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-mist-300) 80%, transparent);
   border-radius: var(--radius-xl2);
-  box-shadow: 0 1px 2px rgba(10, 10, 11, 0.04), 0 8px 24px -16px rgba(10, 10, 11, 0.12);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-accent-500) 4%, transparent),
+    0 12px 40px -20px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+}
+
+@utility glass {
+  background: color-mix(in srgb, var(--color-mist-100) 55%, transparent);
+  border: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 @utility hairline {
-  border: 1px solid var(--color-mist-200);
+  border: 1px solid var(--color-mist-300);
 }
 
 @utility skeleton {
-  background: linear-gradient(90deg, var(--color-mist-100) 25%, var(--color-mist-200) 50%, var(--color-mist-100) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--color-mist-100) 25%,
+    var(--color-mist-200) 50%,
+    var(--color-mist-100) 75%
+  );
   background-size: 900px 100%;
   animation: shimmer 1.5s linear infinite;
   border-radius: 0.75rem;
 }
 
-/* Subtle dotted background texture for section depth */
 @utility dot-grid {
-  background-image: radial-gradient(var(--color-mist-200) 1px, transparent 1px);
-  background-size: 22px 22px;
+  background-image: radial-gradient(color-mix(in srgb, var(--color-accent-500) 18%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@utility glow-accent {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+}
+
+@utility text-gradient {
+  background: linear-gradient(135deg, #fff 0%, var(--color-accent-400) 55%, var(--color-accent-600) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .focus-ring:focus-visible {
@@ -104,18 +152,22 @@ select.field {
   width: 100%;
   border-radius: 0.75rem;
   border: 1px solid var(--color-mist-300);
-  background: var(--color-paper);
+  background: var(--color-mist-100);
   padding: 0.6rem 0.85rem;
   font-size: 0.9rem;
-  color: var(--color-ink-900);
+  color: var(--color-ink-950);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+}
+input.field::placeholder,
+textarea.field::placeholder {
+  color: var(--color-ink-500);
 }
 input.field:focus,
 textarea.field:focus,
 select.field:focus {
   border-color: var(--color-accent-500);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-500) 22%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

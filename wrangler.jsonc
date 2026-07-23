@@ -16,16 +16,16 @@
   "observability": {
     "enabled": true
   },
+  // Sync catalog every 30 minutes.
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
   // Non-secret runtime config, committed so `wrangler deploy` never wipes it.
   // SECRETS (DATABASE_URL, AUTH_SECRET, SECRETS_ENCRYPTION_KEY, LZT_API_TOKEN,
-  // NOWPAYMENTS_*, ADMIN_*) must be set as encrypted Secrets in the Cloudflare
-  // dashboard — those are preserved across deploys and never committed.
-  // NOTE: DATABASE_URL is the direct Neon Postgres URL (postgresql://...). The
-  // Prisma client is engine-less (driverAdapters + queryCompiler) and connects
-  // to Neon via the @neondatabase/serverless driver — no hosted DB platform.
+  // NOWPAYMENTS_*, ADMIN_*, CRON_SECRET) must be set as encrypted Secrets.
   "vars": {
-    "NEXT_PUBLIC_SITE_URL": "https://rumart.xyz",
-    "AUTH_URL": "https://rumart.xyz",
+    "NEXT_PUBLIC_SITE_URL": "https://rumart.amex26292265.workers.dev",
+    "AUTH_URL": "https://rumart.amex26292265.workers.dev",
     "AUTH_TRUST_HOST": "true",
     "SITE_CURRENCY": "USD",
     "LZT_API_BASE": "https://prod-api.lolz.live"

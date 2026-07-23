@@ -139,6 +139,94 @@ export async function purchaseProduct(
 
   const supplier = getSupplier(product.supplier.slug);
 
+  // Manual / seller stocked products: deliver from encrypted credentialStock.
+  if (product.sourceType === "manual" || product.sourceType === "seller") {
+    if (product.credentialStock && product.stock > 0) {
+      try {
+        const { decryptSecret } = await import("@/lib/crypto");
+        const stock = JSON.parse(decryptSecret(product.credentialStock)) as unknown[];
+        if (!Array.isArray(stock) || stock.length === 0) {
+          const reference = await createPending("manual stock empty");
+          return {
+            ok: false,
+            reference,
+            contact: true,
+            error: "Payment received. Delivery is being finalized — contact Telegram with your reference.",
+          };
+        }
+        const unit = stock.shift();
+        const fields = Array.isArray(unit)
+          ? unit
+          : typeof unit === "object" && unit
+            ? Object.entries(unit as Record<string, string>).map(([label, value]) => ({
+                label,
+                value: String(value),
+                secret: /pass|secret|token|cookie|2fa|mail/i.test(label),
+              }))
+            : [{ label: "Credentials", value: String(unit), secret: true }];
+
+        const reference = orderReference();
+        const newStock = stock.length;
+        await prisma.order.create({
+          data: {
+            reference,
+            userId,
+            status: "completed",
+            paymentMethod: "wallet",
+            currency: product.currency,
+            total: charge,
+            cost: product.cost,
+            profit: charge - product.cost,
+            items: { create: { productId: product.id, title: product.title, price: charge, cost: product.cost } },
+            credential: {
+              create: {
+                productTitle: product.title,
+                supplierItemId: product.supplierItemId,
+                ciphertext: encryptSecret(JSON.stringify(fields)),
+              },
+            },
+          },
+        });
+        await recordPromo(reference);
+        await prisma.product.update({
+          where: { id: product.id },
+          data: {
+            stock: newStock,
+            credentialStock: newStock > 0 ? (await import("@/lib/crypto")).encryptSecret(JSON.stringify(stock)) : null,
+            status: newStock > 0 ? "active" : "sold",
+          },
+        });
+        if (product.sellerId) {
+          const feeRate = 0.15;
+          const sellerEarn = Math.round(charge * (1 - feeRate) * 100) / 100;
+          await prisma.sellerProfile.update({
+            where: { id: product.sellerId },
+            data: { salesCount: { increment: 1 }, earnings: { increment: sellerEarn } },
+          });
+        }
+        return { ok: true, reference };
+      } catch (err) {
+        const reference = await createPending(
+          `manual/seller delivery failed: ${err instanceof Error ? err.message : "unknown"}`,
+        );
+        return {
+          ok: false,
+          reference,
+          contact: true,
+          error: "Payment received. We’ll deliver manually — contact Telegram with your reference.",
+        };
+      }
+    }
+    // No stock → pending manual fulfillment (keep payment).
+    const reference = await createPending("manual/seller product awaiting fulfillment");
+    return {
+      ok: false,
+      reference,
+      contact: true,
+      error: "Payment received. Delivery is being prepared — contact Telegram with your reference.",
+    };
+  }
+
   // Can't attempt automated delivery → keep funds reserved as a paid pending
   // order and route to Telegram for manual delivery.
   if (!supplier || !supplier.isConfigured() || !product.supplierItemId) {

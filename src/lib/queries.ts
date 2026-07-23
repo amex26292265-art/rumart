@@ -75,6 +75,44 @@ export async function getRecent(limit = 8): Promise<ProductCardData[]> {
   return rows.map(toCard);
 }
 
+export async function getNewest(limit = 8): Promise<ProductCardData[]> {
+  return memo(`newest-${limit}`, 180_000, () => getRecent(limit));
+}
+
+const AI_SLUGS = [
+  "ai",
+  "chatgpt",
+  "claude",
+  "gemini",
+  "perplexity",
+  "midjourney",
+  "copilot",
+  "cursor",
+  "notion-ai",
+  "software",
+];
+
+export async function getAiProducts(limit = 8): Promise<ProductCardData[]> {
+  return memo(`ai-products-${limit}`, 300_000, async () => {
+    const rows = await prisma.product.findMany({
+      where: {
+        status: "active",
+        OR: [
+          { category: { slug: { in: AI_SLUGS } } },
+          { title: { contains: "ChatGPT", mode: "insensitive" } },
+          { title: { contains: "Claude", mode: "insensitive" } },
+          { title: { contains: "Cursor", mode: "insensitive" } },
+          { title: { contains: "Midjourney", mode: "insensitive" } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: { category: true },
+    });
+    return rows.map(toCard);
+  });
+}
+
 export interface MarketplaceFilters {
   q?: string;
   category?: string;
@@ -147,7 +185,15 @@ export async function getAvailableCountries(): Promise<string[]> {
 export async function getProductBySlug(slug: string) {
   return prisma.product.findUnique({
     where: { slug },
-    include: { category: true, reviews: { include: { user: true }, orderBy: { createdAt: "desc" } } },
+    include: {
+      category: true,
+      reviews: {
+        where: { status: "published" },
+        include: { user: true },
+        orderBy: { createdAt: "desc" },
+      },
+      seller: true,
+    },
   });
 }
 
