@@ -53,3 +53,5 @@ pnpm-workspace.yaml
 
 .secrets.local.json
 secrets-bulk.json
+.cf-token
+.migrate-secret
