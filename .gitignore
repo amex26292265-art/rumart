@@ -50,3 +50,6 @@ pnpm-workspace.yaml
 .open-next
 .wrangler
 .dev.vars
+
+.secrets.local.json
+secrets-bulk.json

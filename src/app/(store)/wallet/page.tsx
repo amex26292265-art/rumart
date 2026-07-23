@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isPaymentsConfigured } from "@/lib/env";
+import { isPaymentsConfigured, isRedotPayConfigured, isAnyCryptoConfigured } from "@/lib/env";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
@@ -28,6 +28,11 @@ export default async function WalletPage({
     prisma.deposit.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 8 }),
   ]);
 
+  const providers = {
+    nowpayments: isPaymentsConfigured,
+    redotpay: isRedotPayConfigured,
+  };
+
   return (
     <Container className="max-w-3xl py-12">
       <h1 className="font-display text-3xl font-bold tracking-tight text-ink-950">Wallet</h1>
@@ -51,7 +56,7 @@ export default async function WalletPage({
           <p className="mt-2 text-xs text-ink-500">Use it to buy any listing instantly.</p>
         </div>
 
-        <TopUp enabled={isPaymentsConfigured} />
+        <TopUp enabled={isAnyCryptoConfigured} providers={providers} />
       </Reveal>
 
       {/* Deposit history */}
