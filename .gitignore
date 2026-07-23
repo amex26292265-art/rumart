@@ -55,3 +55,4 @@ pnpm-workspace.yaml
 secrets-bulk.json
 .cf-token
 .migrate-secret
+.admin-credentials.local
