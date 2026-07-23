@@ -9,6 +9,10 @@ import { verifyPassword, needsRehash, hashPassword } from "@/lib/password";
  * proxy.ts (middleware) and re-checked in server actions.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Trust the request Host so custom domains (e.g. rumart.wtf) work without a
+  // hardcoded AUTH_URL. A fixed AUTH_URL pointing at workers.dev caused auth
+  // sign-in/callback URLs to bounce off-domain (browser "refresh" loop).
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [

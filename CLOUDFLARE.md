@@ -3,8 +3,12 @@
 Rumart runs on **Cloudflare Workers** via `@opennextjs/cloudflare` (OpenNext).
 Account: **amex**. Worker: **rumart**.
 
-Production URL (until custom domain):  
-`https://rumart.amex26292265.workers.dev`
+Custom domain: `https://rumart.wtf`  
+Workers preview URL: `https://rumart.amex26292265.workers.dev`
+
+**Launch gate:** `SITE_PUBLIC` defaults to `false` — both hosts show a coming-soon
+page until you set `SITE_PUBLIC=true` in Worker vars. Private preview:
+`https://rumart.wtf/?preview=<SITE_PREVIEW_SECRET>` (sets a 7-day cookie).
 
 ## Build & deploy (Linux / WSL)
 
@@ -20,7 +24,11 @@ Or: `pnpm cf:deploy`
 
 ## Environment
 
-**Plain vars** are in [`wrangler.jsonc`](wrangler.jsonc) (`NEXT_PUBLIC_SITE_URL`, `AUTH_URL`, etc.).
+**Plain vars** are in [`wrangler.jsonc`](wrangler.jsonc) (`NEXT_PUBLIC_SITE_URL`,
+`SITE_PUBLIC`, `AUTH_TRUST_HOST`, etc.).
+
+Do **not** set `AUTH_URL` — it hardcodes auth absolute URLs and breaks custom
+domains (login bounce / refresh loop). Rely on `AUTH_TRUST_HOST=true`.
 
 **Secrets** (set with `wrangler secret bulk <utf8-json>` — avoid trailing newlines):
 
@@ -31,6 +39,7 @@ Or: `pnpm cf:deploy`
 - `NOWPAYMENTS_API_KEY` / `NOWPAYMENTS_IPN_SECRET` / `NOWPAYMENTS_PUBLIC_KEY`
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 - `CRON_SECRET` — protects `/api/cron/sync`
+- `SITE_PREVIEW_SECRET` — unlocks the site while `SITE_PUBLIC=false`
 
 ## Cron (every 30 minutes)
 

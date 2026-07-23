@@ -56,3 +56,9 @@ secrets-bulk.json
 .cf-token
 .migrate-secret
 .admin-credentials.local
+
+.preview-secret
+.cf-token
+.migrate-secret
+.secrets.local.json
+.admin-credentials.local

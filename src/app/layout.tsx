@@ -6,7 +6,7 @@ const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"] });
 const syne = Syne({ variable: "--font-syne", subsets: ["latin"], weight: ["500", "600", "700", "800"] });
 const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rumart.amex26292265.workers.dev";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rumart.wtf";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
