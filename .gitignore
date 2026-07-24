@@ -63,3 +63,6 @@ secrets-bulk.json
 .secrets.local.json
 .admin-credentials.local
 .preview-url.local
+
+.neon-claimable.local.json
+.neon-new.json
