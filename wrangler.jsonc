@@ -34,7 +34,7 @@
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://rumart.wtf",
     "AUTH_TRUST_HOST": "true",
-    "SITE_PUBLIC": "false",
+    "SITE_PUBLIC": "true",
     "SITE_CURRENCY": "USD",
     "LZT_API_BASE": "https://prod-api.lolz.live"
   }
