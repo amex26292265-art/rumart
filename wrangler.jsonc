@@ -17,9 +17,10 @@
   "observability": {
     "enabled": true
   },
-  // Sync catalog every 30 minutes.
+  // Temporarily paused while Neon recovers from a large catalog purge.
+  // Re-enable `*/30 * * * *` after Admin → Sync succeeds once.
   "triggers": {
-    "crons": ["*/30 * * * *"]
+    "crons": []
   },
   // Non-secret runtime config, committed so `wrangler deploy` never wipes it.
   // SECRETS (DATABASE_URL, AUTH_SECRET, SECRETS_ENCRYPTION_KEY, LZT_API_TOKEN,
