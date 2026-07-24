@@ -8,7 +8,8 @@ import type { NextRequest } from "next/server";
  * rewrites to /coming-soon unless the visitor unlocked preview with
  * ?preview=<SITE_PREVIEW_SECRET> (cookie lasts 7 days).
  *
- * Webhooks/cron/admin ops + static assets always pass through.
+ * When public, anonymous catalog pages get short CDN cache headers so Cloudflare
+ * can serve warm HTML without another Neon round-trip.
  */
 const PREVIEW_COOKIE = "rumart_preview";
 
@@ -25,9 +26,43 @@ function isBypassPath(pathname: string): boolean {
   return false;
 }
 
+function hasSessionCookie(request: NextRequest): boolean {
+  return Boolean(
+    request.cookies.get("__Secure-authjs.session-token") ||
+      request.cookies.get("authjs.session-token") ||
+      request.cookies.get("__Host-authjs.session-token") ||
+      request.cookies.get("__Secure-next-auth.session-token") ||
+      request.cookies.get("next-auth.session-token"),
+  );
+}
+
+/** Anonymous-safe pages — same HTML for every visitor. */
+function isAnonymousCatalog(pathname: string): boolean {
+  if (pathname === "/" || pathname === "/marketplace" || pathname === "/categories" || pathname === "/faq") {
+    return true;
+  }
+  if (pathname.startsWith("/product/")) return true;
+  if (pathname.startsWith("/seller/") && pathname !== "/seller") return true;
+  return false;
+}
+
+function withCatalogCache(request: NextRequest): NextResponse {
+  const res = NextResponse.next();
+  if (
+    request.method === "GET" &&
+    isAnonymousCatalog(request.nextUrl.pathname) &&
+    !hasSessionCookie(request)
+  ) {
+    // Cloudflare edge can reuse this HTML briefly; browser stays revalidate.
+    res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    res.headers.set("CDN-Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  }
+  return res;
+}
+
 export function middleware(request: NextRequest) {
   if (process.env.SITE_PUBLIC === "true") {
-    return NextResponse.next();
+    return withCatalogCache(request);
   }
 
   const { pathname } = request.nextUrl;
@@ -54,7 +89,7 @@ export function middleware(request: NextRequest) {
   }
 
   if (secret && previewCookie === secret) {
-    return NextResponse.next();
+    return withCatalogCache(request);
   }
 
   const rewriteUrl = request.nextUrl.clone();
