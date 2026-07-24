@@ -13,6 +13,8 @@ import {
   Store,
   Star,
   ScrollText,
+  Users,
+  ImageIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,10 +23,12 @@ const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/sync", label: "Synchronization", icon: RefreshCw },
   { href: "/admin/pricing", label: "Pricing", icon: Tags },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/categories", label: "Banners & logos", icon: ImageIcon },
   { href: "/admin/orders", label: "Orders", icon: Receipt },
   { href: "/admin/sellers", label: "Sellers", icon: Store },
   { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/promos", label: "Promo codes", icon: Ticket },
+  { href: "/admin/team", label: "Admin team", icon: Users },
   { href: "/admin/logs", label: "Audit logs", icon: ScrollText },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];

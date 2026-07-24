@@ -37,6 +37,8 @@ export default async function CategoriesPage() {
     accent: c.accent,
     count: c._count.products,
     description: c.description,
+    logoUrl: (c as { logoUrl?: string | null }).logoUrl ?? null,
+    bannerUrl: (c as { bannerUrl?: string | null }).bannerUrl ?? null,
   }));
   const games = mapped.filter((c) => !AI_LIKE.has(c.slug) && !["netflix", "spotify", "disney", "vpn", "streaming"].includes(c.slug));
   const ai = mapped.filter((c) => AI_LIKE.has(c.slug));

@@ -123,6 +123,14 @@ export async function POST(request: Request) {
     "idx notification user read",
     `CREATE INDEX IF NOT EXISTS "Notification_userId_read_idx" ON "Notification"("userId", "read")`,
   );
+  await run(
+    "category logoUrl",
+    `ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "logoUrl" TEXT`,
+  );
+  await run(
+    "category bannerUrl",
+    `ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "bannerUrl" TEXT`,
+  );
 
   // Foreign keys — ignore if already exist
   await run(

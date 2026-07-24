@@ -1,7 +1,8 @@
 /**
  * Build professional marketplace titles from structured account attributes.
- * Prefer attrs over raw supplier titles so listings never look like
- * "Steam Account" / "Valorant Account".
+ * Preferred capture style (LZT Market–like):
+ *   "Astr | 4 Pickaxes, 1 Dances, 3 Gliders"
+ *   "Ascendant | 120 Skins, Email Included"
  */
 
 export type TitleAttrs = {
@@ -19,44 +20,48 @@ export type TitleAttrs = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  steam: "Steam Account",
-  fortnite: "Fortnite Account",
-  valorant: "Valorant Account",
-  riot: "Valorant Account",
-  ea: "EA App Account",
-  gta: "GTA Online Account",
-  socialclub: "GTA Online Account",
-  discord: "Discord Account",
-  telegram: "Telegram Account",
-  genshin: "Genshin Impact Account",
-  mihoyo: "miHoYo Account",
-  epicgames: "Epic Games Account",
-  roblox: "Roblox Account",
-  minecraft: "Minecraft Account",
-  supercell: "Supercell Account",
-  battlenet: "Battle.net Account",
-  uplay: "Ubisoft Account",
-  vpn: "VPN Subscription",
-  instagram: "Instagram Account",
-  tiktok: "TikTok Account",
+  steam: "Steam",
+  fortnite: "Fortnite",
+  valorant: "Valorant",
+  riot: "Valorant",
+  ea: "EA App",
+  gta: "GTA Online",
+  socialclub: "GTA Online",
+  discord: "Discord",
+  telegram: "Telegram",
+  genshin: "Genshin",
+  mihoyo: "miHoYo",
+  epicgames: "Epic Games",
+  roblox: "Roblox",
+  minecraft: "Minecraft",
+  supercell: "Supercell",
+  battlenet: "Battle.net",
+  uplay: "Ubisoft",
+  vpn: "VPN",
+  instagram: "Instagram",
+  tiktok: "TikTok",
   giftcards: "Gift Card",
   gifts: "Gift Card",
-  chatgpt: "ChatGPT Plus",
-  claude: "Claude Pro",
-  gemini: "Gemini Advanced",
-  perplexity: "Perplexity Pro",
+  chatgpt: "ChatGPT",
+  claude: "Claude",
+  gemini: "Gemini",
+  perplexity: "Perplexity",
   midjourney: "Midjourney",
-  copilot: "GitHub Copilot",
-  cursor: "Cursor Pro",
+  copilot: "Copilot",
+  cursor: "Cursor",
   "notion-ai": "Notion AI",
-  ai: "AI Subscription",
-  software: "Software License",
-  hosting: "Hosting Plan",
+  ai: "AI",
+  software: "Software",
+  hosting: "Hosting",
   domains: "Domain",
   netflix: "Netflix",
-  spotify: "Spotify Premium",
+  spotify: "Spotify",
   disney: "Disney+",
 };
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 function stat(attrs: TitleAttrs, ...labels: string[]): string | null {
   for (const label of labels) {
@@ -66,74 +71,244 @@ function stat(attrs: TitleAttrs, ...labels: string[]): string | null {
   return null;
 }
 
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function numStat(attrs: TitleAttrs, ...labels: string[]): number | null {
+  const raw = stat(attrs, ...labels);
+  if (!raw) return null;
+  const n = parseInt(raw.replace(/[^\d]/g, ""), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Parse capture counts embedded in titles like "Astr | 4 Pickaxes, 1 Dances, 3 Gliders". */
+function captureFromTitle(title?: string): {
+  pickaxes: number;
+  dances: number;
+  gliders: number;
+  skins: number;
+  followers: number;
+  level: number;
+} {
+  const t = title ?? "";
+  const n = (re: RegExp) => {
+    const m = re.exec(t);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  return {
+    pickaxes: n(/(\d+)\s*Pickaxes?/i),
+    dances: n(/(\d+)\s*Dances?/i) || n(/(\d+)\s*Emotes?/i),
+    gliders: n(/(\d+)\s*Gliders?/i),
+    skins: n(/(\d+)\+?\s*Skins?/i),
+    followers: n(/([\d,]+)\s*Followers?/i),
+    level: n(/(\d+)\s*lvl/i) || n(/Lvl\s*(\d+)/i),
+  };
+}
+
+/** True when the listing has real inventory/capture data worth selling. */
+export function hasFullCapture(categorySlug: string, attrs: TitleAttrs, rawTitle?: string): boolean {
+  if (rawTitle && isJunkTitle(rawTitle)) return false;
+
+  const fromTitle = captureFromTitle(rawTitle);
+  const pickaxes = numStat(attrs, "Pickaxe count", "Pickaxes") ?? fromTitle.pickaxes;
+  const dances = numStat(attrs, "Dance count", "Dances", "Emote count", "Emotes") ?? fromTitle.dances;
+  const gliders = numStat(attrs, "Glider count", "Gliders") ?? fromTitle.gliders;
+  const skins = numStat(attrs, "Skin count", "Skins", "Skins count") ?? fromTitle.skins;
+  const rank = stat(attrs, "Rank", "Current rank", "Competitive rank", "Tier");
+  const followers = numStat(attrs, "Followers count", "Followers") ?? fromTitle.followers;
+  const vbucks = numStat(attrs, "V-Bucks", "Vbucks", "Balance") ?? 0;
+  const nitro = stat(attrs, "Nitro", "Premium");
+  const games = attrs.games?.length ?? 0;
+  const level =
+    attrs.level ?? numStat(attrs, "Account level", "Level", "Book level") ?? fromTitle.level;
+
+  const slug = categorySlug.toLowerCase();
+
+  if (slug === "fortnite" || slug === "epicgames") {
+    // Need real cosmetics — bare 0/0/0 is not capture.
+    return pickaxes + dances + gliders > 0 || skins > 0;
+  }
+  if (slug === "valorant" || slug === "riot" || slug === "lol") {
+    return skins > 0 || Boolean(rank);
+  }
+  if (slug === "steam") {
+    return games > 0 || level > 0 || skins > 0 || /\|/.test(rawTitle ?? "");
+  }
+  if (slug === "discord") {
+    return Boolean(nitro) || level > 0 || /nitro/i.test(rawTitle ?? "");
+  }
+  if (slug === "instagram" || slug === "tiktok" || slug === "telegram") {
+    return followers > 0;
+  }
+  if (slug === "roblox") {
+    return vbucks > 0 || skins > 0 || level > 0;
+  }
+
+  // Generic: at least one meaningful non-zero capture signal.
+  const meaningfulStats = (attrs.stats ?? []).filter((s) => {
+    const v = s.value.trim().toLowerCase();
+    if (!v || v === "0" || v === "no" || v === "n/a") return false;
+    return true;
+  });
+  return (
+    meaningfulStats.length >= 2 ||
+    games > 0 ||
+    skins > 0 ||
+    Boolean(rank) ||
+    followers > 0 ||
+    pickaxes + dances + gliders > 0 ||
+    (rawTitle ? /\|\s*\d+/.test(rawTitle) : false)
+  );
+}
+
+/** Test / empty placeholder titles that must never stay in the catalog. */
+export function isJunkTitle(title: string): boolean {
+  const t = title.trim().toLowerCase();
+  if (!t) return true;
+  if (/^(valorant|fortnite|steam|discord|roblox|riot)?\s*tests?\b/.test(t)) return true;
+  if (/\b(test account|account test|dummy|placeholder)\b/.test(t)) return true;
+  if (/^\s*(valorant|fortnite|steam)\s+test\s*$/i.test(title)) return true;
+  // Nonsense placeholders
+  if (/^(asdf+|qwer+|zxcv+|dasdas|adfgadfg|lorem|xxx+|aaa+|bbb+|test\d*)$/i.test(t)) return true;
+  if (t.length <= 6 && !/\d/.test(t) && !/\|/.test(t)) return true;
+  // Empty Fortnite capture lines
+  if (/0\s*skins/.test(t) && /0\s*vb/.test(t) && !/\d+\s*pickaxes?/.test(t)) return true;
+  if (/\| 0 skins \| 0 vb/.test(t)) return true;
+  return false;
+}
+
+/** Prefer a skin/rarity lead from supplier title: "Astr | 4 Pickaxes…" → "Astr". */
+function leadFromRawTitle(raw?: string): string | null {
+  if (!raw) return null;
+  const m = /^([^|•]{2,40}?)\s*[|•]\s*/.exec(raw.trim());
+  if (!m) return null;
+  const lead = m[1].trim();
+  if (!lead || isJunkTitle(lead)) return null;
+  if (/^(fortnite|valorant|steam|discord|roblox|account)\b/i.test(lead) && lead.length < 24) {
+    // "Fortnite Account [Serbia]" is not a cosmetic lead.
+    if (/account/i.test(lead)) return null;
+  }
+  return lead.length > 48 ? `${lead.slice(0, 45)}…` : lead;
+}
+
+function joinCapture(parts: string[]): string {
+  return parts.filter(Boolean).join(", ");
 }
 
 /**
- * Produce an SEO-friendly marketplace title.
- * Example: "Valorant Ascendant Account • Prime • 120+ Skins • Full Access"
+ * Produce a capture-style marketplace title.
+ * Example: "Astr | 4 Pickaxes, 1 Dances, 3 Gliders"
  */
 export function buildMarketplaceTitle(
   categorySlug: string,
   attrs: TitleAttrs,
   fallbackRawTitle?: string,
 ): string {
-  const base = CATEGORY_LABEL[categorySlug] ?? `${capitalize(categorySlug || "Digital")} Account`;
-  const parts: string[] = [];
+  const slug = categorySlug.toLowerCase();
+  const base = CATEGORY_LABEL[slug] ?? capitalize(slug || "Digital");
 
-  // Rank / level / premium signals
+  const pickaxes = numStat(attrs, "Pickaxe count", "Pickaxes");
+  const dances = numStat(attrs, "Dance count", "Dances", "Emote count", "Emotes");
+  const gliders = numStat(attrs, "Glider count", "Gliders");
+  const skins = numStat(attrs, "Skin count", "Skins", "Skins count");
   const rank = stat(attrs, "Rank", "Current rank", "Competitive rank", "Tier");
-  if (rank) parts.push(rank);
-
-  const skins = stat(attrs, "Skin count", "Skins", "Skins count");
-  if (skins) {
-    const n = parseInt(skins.replace(/\D/g, ""), 10);
-    parts.push(Number.isFinite(n) && n > 0 ? `${n}+ Skins` : `${skins} Skins`);
-  }
-
-  const balance = stat(attrs, "Balance", "Wallet", "V-Bucks", "Robux");
-  if (balance) parts.push(balance.includes("$") || /\d/.test(balance) ? balance : `Balance ${balance}`);
-
-  const inv = stat(attrs, "Inventory value", "Inventory");
-  if (inv && !balance) parts.push(`Inv ${inv}`);
-
-  const level = attrs.level ?? (stat(attrs, "Account level", "Level") ? Number(stat(attrs, "Account level", "Level")) : null);
-  if (level != null && Number.isFinite(level) && level > 0) parts.push(`Lvl ${level}`);
-
+  const vbucks = stat(attrs, "V-Bucks", "Vbucks", "Balance");
+  const followers = numStat(attrs, "Followers count", "Followers");
   const nitro = stat(attrs, "Nitro", "Premium");
-  if (nitro) parts.push(nitro);
+  const level =
+    attrs.level ??
+    (stat(attrs, "Account level", "Level", "Book level")
+      ? Number(stat(attrs, "Account level", "Level", "Book level"))
+      : null);
 
-  const followers = stat(attrs, "Followers count", "Followers");
-  if (followers) parts.push(`${followers} Followers`);
-
-  // Top games for Steam-like catalogs
-  if (attrs.games?.length) {
-    const top = attrs.games.slice(0, 3).join(" + ");
-    if (top && categorySlug === "steam") parts.unshift(top);
-    else if (top && parts.length < 2) parts.push(top);
+  // If supplier already gave a proper capture title, keep it (after junk check).
+  if (
+    fallbackRawTitle &&
+    !isJunkTitle(fallbackRawTitle) &&
+    /\|\s*\d+\s*(Pickaxes?|Dances?|Gliders?|Skins?)/i.test(fallbackRawTitle)
+  ) {
+    const cleaned = fallbackRawTitle.replace(/\s{2,}/g, " ").trim();
+    return cleaned.length > 140 ? `${cleaned.slice(0, 137)}…` : cleaned;
   }
 
+  // Fortnite cosmetic capture
+  if (slug === "fortnite" || slug === "epicgames") {
+    const bits: string[] = [];
+    if (pickaxes && pickaxes > 0) bits.push(`${pickaxes} Pickaxes`);
+    if (dances && dances > 0) bits.push(`${dances} Dances`);
+    if (gliders && gliders > 0) bits.push(`${gliders} Gliders`);
+    if (bits.length === 0 && skins && skins > 0) bits.push(`${skins} Skins`);
+    if (vbucks && /\d/.test(vbucks) && !/^0\b/.test(vbucks.trim())) bits.push(`${vbucks} V-Bucks`);
+    if (bits.length) {
+      const lead = leadFromRawTitle(fallbackRawTitle) ?? rank ?? base;
+      return `${lead} | ${joinCapture(bits)}`.slice(0, 140);
+    }
+  }
+
+  // Valorant / Riot
+  if (slug === "valorant" || slug === "riot" || slug === "lol") {
+    const bits: string[] = [];
+    if (skins && skins > 0) bits.push(`${skins} Skins`);
+    if (attrs.emailNative) bits.push("Email Included");
+    if (level && level > 0) bits.push(`Lvl ${level}`);
+    if (bits.length || rank) {
+      const lead = leadFromRawTitle(fallbackRawTitle) ?? rank ?? base;
+      const right = bits.length ? joinCapture(bits) : "Full Access";
+      return `${lead} | ${right}`.slice(0, 140);
+    }
+  }
+
+  // Steam — lead with games
+  if (slug === "steam") {
+    const bits: string[] = [];
+    if (attrs.games?.length) bits.push(attrs.games.slice(0, 3).join(" + "));
+    if (level && level > 0) bits.push(`${level} lvl`);
+    if (skins && skins > 0) bits.push(`${skins} Skins`);
+    const inv = stat(attrs, "Inventory value", "Inventory");
+    if (inv) bits.push(`Inv ${inv}`);
+    if (attrs.sda) bits.push("SDA");
+    if (bits.length) {
+      const lead = leadFromRawTitle(fallbackRawTitle) ?? "Steam";
+      return `${lead} | ${joinCapture(bits)}`.slice(0, 140);
+    }
+  }
+
+  // Social
+  if (slug === "instagram" || slug === "tiktok" || slug === "telegram") {
+    const bits: string[] = [];
+    if (followers && followers > 0) bits.push(`${followers.toLocaleString("en-US")} Followers`);
+    if (attrs.emailNative) bits.push("Email Included");
+    if (bits.length) return `${base} | ${joinCapture(bits)}`.slice(0, 140);
+  }
+
+  if (slug === "discord" && (nitro || (level && level > 0))) {
+    const bits: string[] = [];
+    if (nitro) bits.push(nitro);
+    if (level && level > 0) bits.push(`Lvl ${level}`);
+    return `${base} | ${joinCapture(bits) || "Full Access"}`.slice(0, 140);
+  }
+
+  // Generic structured fallback
+  const parts: string[] = [];
+  if (rank) parts.push(rank);
+  if (skins && skins > 0) parts.push(`${skins} Skins`);
+  if (vbucks && /\d/.test(vbucks) && !/^0\b/.test(vbucks.trim())) parts.push(vbucks);
+  if (level && level > 0) parts.push(`Lvl ${level}`);
+  if (followers && followers > 0) parts.push(`${followers} Followers`);
+  if (attrs.games?.length) parts.push(attrs.games.slice(0, 2).join(" + "));
   if (attrs.emailNative) parts.push("Email Included");
   if (attrs.personal) parts.push("Personal");
   if (attrs.sda) parts.push("SDA");
-  if (attrs.tags?.includes("Prime") || attrs.tags?.some((t) => /prime/i.test(t))) parts.push("Prime");
 
-  // Always end with access signal when we have structured data
-  const hasStructure = parts.length > 0 || attrs.emailNative || (attrs.games?.length ?? 0) > 0;
-  if (hasStructure) parts.push("Full Access");
+  if (parts.length) {
+    const lead = leadFromRawTitle(fallbackRawTitle) ?? base;
+    return `${lead} | ${joinCapture(parts.slice(0, 4))}`.slice(0, 140);
+  }
 
-  // If we have almost nothing useful, try cleaning the raw title
-  if (parts.length === 0 && fallbackRawTitle) {
+  if (fallbackRawTitle && !isJunkTitle(fallbackRawTitle)) {
     const cleaned = fallbackRawTitle
       .replace(/\b(lzt|lolz|zelenka)\b/gi, "")
       .replace(/\s{2,}/g, " ")
       .trim();
-    if (cleaned && !/^(valorant|steam|fortnite|discord|roblox)\s+account$/i.test(cleaned)) {
-      return cleaned.length > 120 ? `${cleaned.slice(0, 117)}…` : cleaned;
-    }
+    if (cleaned) return cleaned.length > 140 ? `${cleaned.slice(0, 137)}…` : cleaned;
   }
 
-  const title = parts.length ? `${base} • ${parts.slice(0, 5).join(" • ")}` : `${base} • Full Access`;
-  return title.length > 140 ? `${title.slice(0, 137)}…` : title;
+  return `${base} | Full Access`;
 }

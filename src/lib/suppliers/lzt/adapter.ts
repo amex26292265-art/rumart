@@ -7,7 +7,7 @@ import type {
 } from "@/lib/suppliers/types";
 import { lztMarket, type LztRawItem, type LztPurchaseResponse } from "./service";
 import { buildAccountInfo } from "./account-info";
-import { buildMarketplaceTitle } from "./titles";
+import { buildMarketplaceTitle, hasFullCapture, isJunkTitle } from "./titles";
 
 /**
  * The category slugs the LZT Market API actually accepts at /market/{slug}.
@@ -122,27 +122,31 @@ function sanitizeSupplier(text: string): string {
     .trim();
 }
 
-function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing {
+function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing | null {
   const info = buildAccountInfo(raw);
   const rawTitle = raw.title_en || raw.title || `${supplierCategory} account #${raw.item_id}`;
   const sanitizedFallback = sanitizeSupplier(rawTitle);
-  const title = buildMarketplaceTitle(
-    supplierCategory,
-    {
-      level: info.level,
-      emailNative: info.emailNative,
-      vac: info.vac,
-      personal: info.personal,
-      sda: info.sda,
-      warranty: info.warranty,
-      country: info.country,
-      games: info.games,
-      tags: info.tags,
-      stats: info.stats,
-      origin: info.origin,
-    },
-    sanitizedFallback,
-  );
+  if (isJunkTitle(sanitizedFallback) || isJunkTitle(rawTitle)) return null;
+
+  const titleAttrs = {
+    level: info.level,
+    emailNative: info.emailNative,
+    vac: info.vac,
+    personal: info.personal,
+    sda: info.sda,
+    warranty: info.warranty,
+    country: info.country,
+    games: info.games,
+    tags: info.tags,
+    stats: info.stats,
+    origin: info.origin,
+  };
+
+  if (!hasFullCapture(supplierCategory, titleAttrs, sanitizedFallback)) return null;
+
+  const title = buildMarketplaceTitle(supplierCategory, titleAttrs, sanitizedFallback);
+  if (isJunkTitle(title)) return null;
+
   return {
     images: extractImages(raw),
     supplierItemId: String(raw.item_id),
@@ -241,7 +245,8 @@ export class LztSupplier implements Supplier {
     });
     return raw
       .map((item) => mapItem(item, query.supplierCategory))
-      .filter((listing) => {
+      .filter((listing): listing is SupplierListing => {
+        if (!listing) return false;
         // Only sell items that are actually active on the supplier.
         if (listing.attributes?.itemState && listing.attributes.itemState !== "active") return false;
         if (query.country && listing.attributes?.country !== query.country) return false;
@@ -252,7 +257,12 @@ export class LztSupplier implements Supplier {
   async getItem(supplierItemId: string): Promise<SupplierListing | null> {
     const raw = await lztMarket.getItem(supplierItemId);
     if (!raw) return null;
-    return mapItem(raw, "");
+    // Category unknown here — infer from raw prefixed keys when possible.
+    const cat =
+      Object.keys(raw as object)
+        .map((k) => /^([a-z0-9]+)_/.exec(k)?.[1])
+        .find((p): p is string => !!p && isValidLztCategory(p)) ?? "";
+    return mapItem(raw, cat);
   }
 
   async purchase(supplierItemId: string, expectedCost: number): Promise<SupplierPurchaseResult> {

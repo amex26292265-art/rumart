@@ -68,10 +68,7 @@ export function ProductCard({ product }: { product: ProductCardData }) {
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <BrandIcon
-              slug={product.categorySlug}
-              className="h-12 w-12 text-white/90 transition-transform duration-500 group-hover:scale-110"
-            />
+  <BrandIcon slug={product.categorySlug} className="h-12 w-12 text-white/90 transition-transform duration-500 group-hover:scale-110" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-paper/80 via-transparent to-transparent" />
           <span className="absolute left-3 top-3">

@@ -92,6 +92,10 @@ model Category {
   name             String
   description      String?
   icon             String? // lucide icon name or asset path
+  /** Optional public URL/path for category tile logo (SVG/PNG). */
+  logoUrl          String?
+  /** Optional wide banner image for category header. */
+  bannerUrl        String?
   accent           String   @default("#2563eb")
   order            Int      @default(0)
   featured         Boolean  @default(false)

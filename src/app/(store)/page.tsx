@@ -57,6 +57,8 @@ async function HomeCategories() {
     accent: c.accent,
     count: c._count.products,
     description: c.description,
+    logoUrl: (c as { logoUrl?: string | null }).logoUrl ?? null,
+    bannerUrl: (c as { bannerUrl?: string | null }).bannerUrl ?? null,
   }));
   return (
     <Container className="py-6">

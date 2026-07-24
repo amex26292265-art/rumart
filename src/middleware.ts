@@ -21,6 +21,7 @@ function isBypassPath(pathname: string): boolean {
   if (pathname.startsWith("/api/auth/")) return true;
   if (pathname.startsWith("/api/admin/migrate")) return true;
   if (pathname.startsWith("/api/admin/reset-password")) return true;
+  if (pathname.startsWith("/api/admin/purge-capture")) return true;
   if (pathname === "/favicon.ico" || pathname === "/icon.svg" || pathname === "/robots.txt") return true;
   if (/\.(?:ico|png|svg|jpg|jpeg|webp|gif|txt|xml|webmanifest)$/i.test(pathname)) return true;
   return false;

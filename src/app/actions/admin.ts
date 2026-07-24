@@ -23,16 +23,35 @@ const num = (fd: FormData, k: string) => {
 const bool = (fd: FormData, k: string) => fd.get(k) === "on" || fd.get(k) === "true";
 
 /** Run every enabled sync rule now (inline). Returns a summary for the UI. */
-export async function triggerSync(): Promise<{ imported: number; updated: number } | { error: string }> {
+export async function triggerSync(): Promise<
+  { imported: number; updated: number; removed?: number } | { error: string }
+> {
   await requireAdmin();
   try {
     const res = await runAllRules();
     invalidate("cat-");
     invalidate("trending-");
+    invalidate("newest-");
     revalidatePath("/admin", "layout");
-    return { imported: res.imported, updated: res.updated };
+    revalidatePath("/marketplace");
+    revalidatePath("/");
+    return { imported: res.imported, updated: res.updated, removed: res.removed };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Sync failed" };
+  }
+}
+
+export async function purgeNoCaptureProducts(): Promise<{ deleted: number } | { error: string }> {
+  await requireAdmin();
+  try {
+    const { purgeBadProducts } = await import("@/lib/sync/sync-service");
+    const res = await purgeBadProducts();
+    revalidatePath("/admin", "layout");
+    revalidatePath("/marketplace");
+    revalidatePath("/");
+    return { deleted: res.deleted };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Purge failed" };
   }
 }
 
@@ -474,4 +493,105 @@ export async function generateAllRules(): Promise<{ created: number; updated: nu
   }
   revalidatePath("/admin/sync");
   return { created, updated };
+}
+
+// ─── Admin team ────────────────────────────────────────────────────────────
+export async function createAdminUser(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const email = str(fd, "email").toLowerCase();
+  const password = str(fd, "password");
+  const name = str(fd, "name") || null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Enter a valid email." };
+  if (password.length < 10) return { ok: false, error: "Password must be at least 10 characters." };
+
+  const { hashPassword } = await import("@/lib/password");
+  const passwordHash = await hashPassword(password);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { role: "admin", passwordHash, name: name ?? existing.name },
+    });
+  } else {
+    await prisma.user.create({
+      data: { email, passwordHash, name, role: "admin" },
+    });
+  }
+  revalidatePath("/admin/team");
+  return { ok: true };
+}
+
+export async function setUserRole(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const role = str(fd, "role");
+  if (!["customer", "admin", "seller"].includes(role)) return { ok: false, error: "Invalid role." };
+  const session = await auth();
+  const selfId = (session?.user as { id?: string } | undefined)?.id;
+  if (selfId && selfId === id && role !== "admin") {
+    return { ok: false, error: "You can’t demote yourself." };
+  }
+  await prisma.user.update({ where: { id }, data: { role } });
+  revalidatePath("/admin/team");
+  return { ok: true };
+}
+
+// ─── Category banners / logos ──────────────────────────────────────────────
+export async function saveCategoryBranding(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const logoUrl = str(fd, "logoUrl") || null;
+  const bannerUrl = str(fd, "bannerUrl") || null;
+  const accent = str(fd, "accent") || "#7c3aed";
+  const featured = bool(fd, "featured");
+  await prisma.category.update({
+    where: { id },
+    data: { logoUrl, bannerUrl, accent, featured },
+  });
+  invalidate("cat-");
+  revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidatePath("/categories");
+  return { ok: true };
+}
+
+/** Apply default /brands/{slug}.svg logos for known categories. */
+export async function seedCategoryLogos(): Promise<{ updated: number }> {
+  await requireAdmin();
+  const cats = await prisma.category.findMany();
+  let updated = 0;
+  for (const c of cats) {
+    const logoUrl = `/brands/${c.slug === "riot" ? "valorant" : c.slug === "socialclub" ? "gta" : c.slug}.svg`;
+    // Only set when file is one we ship, or leave custom
+    const known = [
+      "fortnite",
+      "valorant",
+      "steam",
+      "discord",
+      "telegram",
+      "roblox",
+      "minecraft",
+      "ea",
+      "instagram",
+      "tiktok",
+      "chatgpt",
+      "claude",
+      "cursor",
+      "epicgames",
+      "gta",
+      "genshin",
+      "ai",
+    ];
+    const slug = c.slug === "riot" ? "valorant" : c.slug === "socialclub" ? "gta" : c.slug;
+    if (!known.includes(slug)) continue;
+    await prisma.category.update({
+      where: { id: c.id },
+      data: { logoUrl: c.logoUrl || logoUrl },
+    });
+    updated++;
+  }
+  invalidate("cat-");
+  revalidatePath("/admin/categories");
+  revalidatePath("/");
+  return { updated };
 }
