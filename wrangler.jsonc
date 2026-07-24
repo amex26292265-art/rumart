@@ -17,9 +17,9 @@
   "observability": {
     "enabled": true
   },
-  // Sync catalog every 30 minutes — purge stale/no-capture and import full capture.
+  // Cron paused while Neon data-transfer quota recovers (re-enable */30 after quota resets).
   "triggers": {
-    "crons": ["*/30 * * * *"]
+    "crons": []
   },
   // Non-secret runtime config, committed so `wrangler deploy` never wipes it.
   // SECRETS (DATABASE_URL, AUTH_SECRET, SECRETS_ENCRYPTION_KEY, LZT_API_TOKEN,

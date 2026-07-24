@@ -19,15 +19,17 @@ export default async function CommunityPage() {
   const signedIn = Boolean((session?.user as { id?: string } | undefined)?.id);
 
   const [categories, recent] = await Promise.all([
-    prisma.forumCategory.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.forumTopic.findMany({
-      orderBy: [{ pinned: "desc" }, { lastReplyAt: "desc" }, { createdAt: "desc" }],
-      take: 12,
-      include: {
-        category: { select: { slug: true, name: true } },
-        author: { select: { name: true, username: true } },
-      },
-    }),
+    prisma.forumCategory.findMany({ orderBy: { sortOrder: "asc" } }).catch(() => []),
+    prisma.forumTopic
+      .findMany({
+        orderBy: [{ pinned: "desc" }, { lastReplyAt: "desc" }, { createdAt: "desc" }],
+        take: 12,
+        include: {
+          category: { select: { slug: true, name: true } },
+          author: { select: { name: true, username: true } },
+        },
+      })
+      .catch(() => []),
   ]);
 
   return (
@@ -57,6 +59,11 @@ export default async function CommunityPage() {
 
       <div className="mt-10 grid gap-8 lg:grid-cols-12">
         <div className="space-y-3 lg:col-span-4">
+          {categories.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-mist-300 p-4 text-sm text-ink-500">
+              Forum categories will appear after the V3 schema migrate completes.
+            </div>
+          )}
           {categories.map((c) => (
             <Link
               key={c.id}
@@ -76,7 +83,7 @@ export default async function CommunityPage() {
           <h2 className="mb-4 font-display text-xl font-semibold text-ink-950">Latest topics</h2>
           {recent.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-mist-300 p-8 text-center text-sm text-ink-500">
-              No topics yet. Start the first discussion.
+              No topics yet. Start the first discussion once the database is ready.
             </div>
           ) : (
             <ul className="divide-y divide-mist-300/60 rounded-2xl border border-mist-300/70 bg-mist-100/60">
