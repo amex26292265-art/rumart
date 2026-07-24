@@ -1,21 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Outfit, Syne, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const outfit = Outfit({ variable: "--font-outfit", subsets: ["latin"] });
+const syne = Syne({ variable: "--font-syne", subsets: ["latin"], weight: ["500", "600", "700", "800"] });
+const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://rumart.wtf";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://rumart.xyz"),
+  metadataBase: new URL(siteUrl),
   title: {
-    default: "Rumart — Premium digital marketplace",
+    default: "Rumart — Premium digital marketplace by Velexis",
     template: "%s · Rumart",
   },
   description:
-    "Rumart is a premium marketplace for digital accounts and goods, with instant automated delivery.",
+    "Rumart by Velexis is a premium marketplace for game accounts, AI subscriptions, and digital goods — instant encrypted delivery.",
   openGraph: {
     title: "Rumart — Premium digital marketplace",
-    description: "Instant, automated delivery of premium digital goods.",
+    description: "Instant, automated delivery of premium digital goods. Built by Velexis.",
     url: "/",
     siteName: "Rumart",
     type: "website",
@@ -24,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+    <html lang="en" className={`${outfit.variable} ${syne.variable} ${jetbrains.variable} h-full`}>
       <body className="min-h-full antialiased">{children}</body>
     </html>
   );

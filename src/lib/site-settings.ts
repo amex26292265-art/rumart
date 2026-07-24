@@ -29,17 +29,28 @@ export interface SiteSettings {
 
 export async function getSiteSettings(): Promise<SiteSettings> {
   // Cached ~2 min: settings change rarely but this runs on every page (footer).
-  const rows = await memo("site-settings", 120_000, () =>
-    prisma.setting.findMany({ where: { key: { in: [...SITE_SETTING_KEYS] } } }),
-  );
-  const map = new Map(rows.map((r) => [r.key, r.value]));
-  const telegramHandle = (map.get("telegramHandle") || DEFAULTS.telegramHandle).replace(/^@/, "");
-  return {
-    telegramHandle,
-    telegramUrl: `https://t.me/${telegramHandle}`,
-    supportNote: map.get("supportNote") || DEFAULTS.supportNote,
-    brandTagline: map.get("brandTagline") || DEFAULTS.brandTagline,
-  };
+  try {
+    const rows = await memo("site-settings", 120_000, () =>
+      prisma.setting.findMany({ where: { key: { in: [...SITE_SETTING_KEYS] } } }),
+    );
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    const telegramHandle = (map.get("telegramHandle") || DEFAULTS.telegramHandle).replace(/^@/, "");
+    return {
+      telegramHandle,
+      telegramUrl: `https://t.me/${telegramHandle}`,
+      supportNote: map.get("supportNote") || DEFAULTS.supportNote,
+      brandTagline: map.get("brandTagline") || DEFAULTS.brandTagline,
+    };
+  } catch {
+    // Build / cold failure — never block the shell on settings.
+    const telegramHandle = DEFAULTS.telegramHandle;
+    return {
+      telegramHandle,
+      telegramUrl: `https://t.me/${telegramHandle}`,
+      supportNote: DEFAULTS.supportNote,
+      brandTagline: DEFAULTS.brandTagline,
+    };
+  }
 }
 
 /** Build a t.me deep link with a prefilled message. */

@@ -49,12 +49,12 @@ function AuthCard() {
       className="card w-full max-w-sm p-8"
     >
       <div className="mb-6 flex flex-col items-center text-center">
-        <Logo showWord={false} />
-        <h1 className="mt-4 text-xl font-semibold text-ink-950">
+        <Logo showOwner />
+        <h1 className="mt-4 font-display text-xl font-bold text-ink-950">
           {mode === "login" ? "Welcome back" : "Create your account"}
         </h1>
         <p className="mt-1 text-sm text-ink-500">
-          {mode === "login" ? "Sign in to continue" : "Join Rumart in seconds"}
+          {mode === "login" ? "Sign in to continue" : "Join Rumart by Velexis in seconds"}
         </p>
       </div>
 
@@ -85,7 +85,7 @@ function AuthCard() {
           className="field"
           autoComplete={mode === "login" ? "current-password" : "new-password"}
         />
-        {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="rounded-xl bg-red-500/15 px-3 py-2 text-sm text-red-400">{error}</p>}
         <Button type="submit" disabled={loading} size="lg" className="w-full">
           {loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </Button>
@@ -99,7 +99,7 @@ function AuthCard() {
             setMode(mode === "login" ? "register" : "login");
             setError(null);
           }}
-          className="font-medium text-accent-600 hover:text-accent-500"
+          className="font-medium text-accent-400 hover:text-accent-300"
         >
           {mode === "login" ? "Create an account" : "Sign in"}
         </button>

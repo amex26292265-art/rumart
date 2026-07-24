@@ -24,7 +24,15 @@ model User {
   email         String   @unique
   passwordHash  String
   name          String?
-  role          String   @default("customer") // customer | admin
+  username      String?  @unique
+  bio           String?
+  avatarUrl     String?
+  bannerUrl     String?
+  discord       String?
+  telegram      String?
+  website       String?
+  country       String?
+  role          String   @default("customer") // customer | admin | seller
   walletBalance Float    @default(0) // store credit, in site currency
   twoFactorSecret String? // reserved for 2FA (TOTP)
   twoFactorEnabled Boolean @default(false)
@@ -37,6 +45,16 @@ model User {
   notifications Notification[]
   auditLogs     AuditLog[]
   deposits      Deposit[]
+  sellerProfile SellerProfile?
+  sellerApplications SellerApplication[]
+  forumTopics   ForumTopic[]
+  forumPosts    ForumPost[]
+  forumReactions ForumReaction[]
+  following     Follow[] @relation("Following")
+  followers     Follow[] @relation("Followers")
+  conversationParts ConversationParticipant[]
+  messagesSent  Message[]
+  activities    ActivityEvent[]
 }
 
 // Wallet top-up via a crypto payment gateway (Cryptomus). Credited to
@@ -90,6 +108,10 @@ model Category {
   name             String
   description      String?
   icon             String? // lucide icon name or asset path
+  /** Optional public URL/path for category tile logo (SVG/PNG). */
+  logoUrl          String?
+  /** Optional wide banner image for category header. */
+  bannerUrl        String?
   accent           String   @default("#2563eb")
   order            Int      @default(0)
   featured         Boolean  @default(false)
@@ -117,6 +139,12 @@ model Product {
   images         Json? // string[]
   attributes     Json? // full parsed supplier info (stats, games, sections…)
   supplierItemId String? // id on the supplier side (e.g. LZT item id)
+  // lzt = synced reseller stock | manual = admin-created | seller = marketplace seller
+  sourceType     String   @default("lzt")
+  // Encrypted JSON array of credential payloads for manual/seller stock.
+  credentialStock String?
+  sellerId       String?
+  seller         SellerProfile? @relation(fields: [sellerId], references: [id], onDelete: SetNull)
 
   // Denormalized, indexable fields for fast server-side filtering.
   country      String? // normalized account country name
@@ -141,6 +169,8 @@ model Product {
   @@index([categoryId, status, price])
   @@index([status, country])
   @@index([status, createdAt])
+  @@index([sourceType, status])
+  @@index([sellerId])
 }
 
 // ─── Sync configuration & runs ─────────────────────────────────────────────
@@ -249,6 +279,9 @@ model Review {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   rating    Int // 1..5
   comment   String?
+  status    String   @default("published") // pending | published | hidden
+  helpful   Int      @default(0)
+  verified  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([userId, productId])
@@ -285,6 +318,8 @@ model Notification {
   body      String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId, read])
 }
 
 model AuditLog {
@@ -301,6 +336,67 @@ model AuditLog {
 model Setting {
   key   String @id
   value String
+}
+
+// ─── Seller marketplace ────────────────────────────────────────────────────
+model SellerApplication {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  bio         String?
+  experience  String?
+  categories  String?  // comma-separated
+  country     String?
+  portfolio   String?
+  discord     String?
+  telegram    String?
+  website     String?
+  reason      String?
+  status      String   @default("pending") // pending | approved | rejected
+  adminNote   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model SellerProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug        String   @unique
+  displayName String
+  bio         String?
+  badge       String   @default("seller") // seller | verified | pro
+  level       Int      @default(1)
+  reputation  Int      @default(0)
+  verified    Boolean  @default(false)
+  status      String   @default("active") // active | suspended
+  ratingAvg   Float    @default(0)
+  ratingCount Int      @default(0)
+  salesCount  Int      @default(0)
+  earnings    Float    @default(0)
+  followerCount Int    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+  payouts  SellerPayout[]
+}
+
+model SellerPayout {
+  id        String        @id @default(cuid())
+  sellerId  String
+  seller    SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    String        @default("manual") // manual | crypto | bank
+  status    String        @default("pending") // pending | paid | cancelled
+  note      String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([sellerId, status])
 }
 
 // ─── Promo / discount codes ────────────────────────────────────────────────
@@ -332,4 +428,139 @@ model PromoRedemption {
   createdAt DateTime  @default(now())
 
   @@index([codeId, userId])
+}
+
+// ─── Community forum ───────────────────────────────────────────────────────
+model ForumCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  icon        String?
+  sortOrder   Int      @default(0)
+  topicCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  topics ForumTopic[]
+}
+
+model ForumTopic {
+  id         String   @id @default(cuid())
+  categoryId String
+  category   ForumCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title      String
+  slug       String   @unique
+  body       String
+  kind       String   @default("discussion") // discussion | guide | question | service | marketplace
+  pinned     Boolean  @default(false)
+  locked     Boolean  @default(false)
+  views      Int      @default(0)
+  replyCount Int      @default(0)
+  lastReplyAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  posts ForumPost[]
+
+  @@index([categoryId, lastReplyAt])
+  @@index([createdAt])
+}
+
+model ForumPost {
+  id        String   @id @default(cuid())
+  topicId   String
+  topic     ForumTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reactions ForumReaction[]
+
+  @@index([topicId, createdAt])
+}
+
+model ForumReaction {
+  id        String   @id @default(cuid())
+  postId    String
+  post      ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String   // like | fire | helpful | wow
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId, emoji])
+}
+
+// ─── Social graph ──────────────────────────────────────────────────────────
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+// ─── Messaging ─────────────────────────────────────────────────────────────
+model Conversation {
+  id        String   @id @default(cuid())
+  kind      String   @default("dm") // dm | order
+  orderRef  String?
+  subject   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+model ConversationParticipant {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  typingAt       DateTime?
+  joinedAt       DateTime @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  attachmentUrl  String?
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ─── Marketplace activity feed ─────────────────────────────────────────────
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  type      String   // product_added | product_sold | seller_joined | review | forum_topic | announcement | flash_sale | user_joined
+  title     String
+  body      String?
+  href      String?
+  meta      String?  // JSON blob
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type, createdAt])
 }

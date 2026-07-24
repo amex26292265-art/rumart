@@ -15,8 +15,8 @@ export interface CategoryOption {
 
 function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-mist-200 pt-4 first:border-0 first:pt-0">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">{title}</p>
+    <div className="border-t border-mist-300 pt-4 first:border-0 first:pt-0">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">{title}</p>
       {children}
     </div>
   );

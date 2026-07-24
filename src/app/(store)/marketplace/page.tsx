@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { Stagger, StaggerItem } from "@/components/ui/motion";
 import { ProductRow } from "@/components/store/ProductRow";
 import { MarketplaceFilters, SortSelect } from "@/components/store/MarketplaceFilters";
 import { getAllCategories, getMarketplace, getAvailableCountries } from "@/lib/queries";
 import { filtersForCategory } from "@/lib/filter-config";
 
+/** Workers build has no Neon — runtime-dynamic; categories/countries still memoized. */
 export const dynamic = "force-dynamic";
 
 type Search = { [key: string]: string | string[] | undefined };
@@ -51,10 +51,41 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
     return `/marketplace?${next.toString()}`;
   };
 
+  const activeChips: { label: string; href: string }[] = [];
+  const clearParam = (key: string) => {
+    const next = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) if (typeof v === "string" && v && k !== key && k !== "page") next.set(k, v);
+    return `/marketplace?${next.toString()}`;
+  };
+  if (one(sp.q)) activeChips.push({ label: `Search: ${one(sp.q)}`, href: clearParam("q") });
+  if (category) {
+    const catName = categories.find((c) => c.slug === category)?.name ?? category;
+    activeChips.push({ label: catName, href: clearParam("category") });
+  }
+  if (one(sp.country)) activeChips.push({ label: `Region: ${one(sp.country)}`, href: clearParam("country") });
+  if (one(sp.delivery)) activeChips.push({ label: `Delivery: ${one(sp.delivery)}`, href: clearParam("delivery") });
+
   return (
     <Container className="py-10">
-      <h1 className="text-3xl font-semibold tracking-tight text-ink-950">Marketplace</h1>
-      <p className="mt-1 text-sm text-ink-500">Verified digital accounts with automated delivery.</p>
+      <h1 className="font-display text-3xl font-bold tracking-tight text-ink-950 sm:text-4xl">Marketplace</h1>
+      <p className="mt-1 text-sm text-ink-500">Verified digital goods with automated encrypted delivery.</p>
+
+      {activeChips.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {activeChips.map((c) => (
+            <Link
+              key={c.label}
+              href={c.href}
+              className="inline-flex items-center gap-1.5 rounded-full border border-accent-500/30 bg-accent-500/10 px-3 py-1 text-xs font-medium text-accent-400 hover:bg-accent-500/20"
+            >
+              {c.label} ×
+            </Link>
+          ))}
+          <Link href="/marketplace" className="text-xs font-medium text-ink-500 hover:text-ink-900">
+            Clear all
+          </Link>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
         <aside>
@@ -85,13 +116,11 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
               }
             />
           ) : (
-            <Stagger className="space-y-3" stagger={0.03}>
+            <div className="space-y-3">
               {products.map((p) => (
-                <StaggerItem key={p.id}>
-                  <ProductRow product={p} />
-                </StaggerItem>
+                <ProductRow key={p.id} product={p} />
               ))}
-            </Stagger>
+            </div>
           )}
 
           {totalPages > 1 && (
@@ -107,7 +136,7 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
                     key={p}
                     href={pageUrl(p as number)}
                     className={`grid h-10 min-w-10 place-items-center rounded-xl px-2 text-sm font-medium ${
-                      p === page ? "bg-ink-950 text-white" : "card text-ink-700"
+                      p === page ? "bg-accent-500 text-white shadow-[0_0_16px_rgba(139,92,246,0.35)]" : "card text-ink-700"
                     }`}
                   >
                     {p}
