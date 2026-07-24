@@ -113,7 +113,6 @@ export function hasFullCapture(categorySlug: string, attrs: TitleAttrs, rawTitle
   const skins = numStat(attrs, "Skin count", "Skins", "Skins count") ?? fromTitle.skins;
   const rank = stat(attrs, "Rank", "Current rank", "Competitive rank", "Tier");
   const followers = numStat(attrs, "Followers count", "Followers") ?? fromTitle.followers;
-  const vbucks = numStat(attrs, "V-Bucks", "Vbucks", "Balance") ?? 0;
   const nitro = stat(attrs, "Nitro", "Premium");
   const games = attrs.games?.length ?? 0;
   const level =
@@ -121,41 +120,72 @@ export function hasFullCapture(categorySlug: string, attrs: TitleAttrs, rawTitle
 
   const slug = categorySlug.toLowerCase();
 
-  if (slug === "fortnite" || slug === "epicgames") {
+  if (slug === "fortnite") {
     // Need real cosmetics — bare 0/0/0 is not capture.
     return pickaxes + dances + gliders > 0 || skins > 0;
   }
+  if (slug === "epicgames") {
+    // Epic library accounts — games / level / priced capture titles.
+    return games > 0 || level > 0 || skins > 0 || /\|/.test(rawTitle ?? "") || meaningfulTitle(rawTitle);
+  }
   if (slug === "valorant" || slug === "riot" || slug === "lol") {
-    return skins > 0 || Boolean(rank);
+    return skins > 0 || Boolean(rank) || meaningfulTitle(rawTitle);
   }
   if (slug === "steam") {
     return games > 0 || level > 0 || skins > 0 || /\|/.test(rawTitle ?? "");
   }
   if (slug === "discord") {
-    return Boolean(nitro) || level > 0 || /nitro/i.test(rawTitle ?? "");
+    return Boolean(nitro) || level > 0 || /nitro/i.test(rawTitle ?? "") || meaningfulTitle(rawTitle);
   }
   if (slug === "instagram" || slug === "tiktok" || slug === "telegram") {
-    return followers > 0;
+    return (
+      followers > 0 ||
+      attrs.emailNative === true ||
+      Boolean(attrs.country) ||
+      meaningfulStatsCount(attrs) >= 1 ||
+      meaningfulTitle(rawTitle)
+    );
   }
   if (slug === "roblox") {
-    return vbucks > 0 || skins > 0 || level > 0;
+    const robux =
+      numStat(attrs, "Robux", "Balance", "Robux balance", "RAP", "Limiteds", "Limited items") ?? 0;
+    return (
+      robux > 0 ||
+      skins > 0 ||
+      level > 0 ||
+      /headless|korblox|limited|robux/i.test(rawTitle ?? "") ||
+      meaningfulTitle(rawTitle)
+    );
   }
 
   // Generic: at least one meaningful non-zero capture signal.
-  const meaningfulStats = (attrs.stats ?? []).filter((s) => {
-    const v = s.value.trim().toLowerCase();
-    if (!v || v === "0" || v === "no" || v === "n/a") return false;
-    return true;
-  });
+  const meaningfulStats = meaningfulStatsCount(attrs);
   return (
-    meaningfulStats.length >= 2 ||
+    meaningfulStats >= 2 ||
     games > 0 ||
     skins > 0 ||
     Boolean(rank) ||
     followers > 0 ||
     pickaxes + dances + gliders > 0 ||
-    (rawTitle ? /\|\s*\d+/.test(rawTitle) : false)
+    (rawTitle ? /\|\s*\d+/.test(rawTitle) : false) ||
+    meaningfulTitle(rawTitle)
   );
+}
+
+function meaningfulStatsCount(attrs: TitleAttrs): number {
+  return (attrs.stats ?? []).filter((s) => {
+    const v = s.value.trim().toLowerCase();
+    if (!v || v === "0" || v === "no" || v === "n/a" || v === "false") return false;
+    return true;
+  }).length;
+}
+
+/** Non-junk supplier title with enough substance to list. */
+function meaningfulTitle(rawTitle?: string): boolean {
+  if (!rawTitle) return false;
+  if (isJunkTitle(rawTitle)) return false;
+  const t = rawTitle.trim();
+  return t.length >= 12;
 }
 
 /** Test / empty placeholder titles that must never stay in the catalog. */
