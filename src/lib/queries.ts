@@ -250,6 +250,34 @@ export async function getStoreStats() {
       prisma.category.count(),
       prisma.order.count({ where: { status: "completed" } }),
     ]);
-    return { products, categories, completedOrders };
+    return {
+      products,
+      categories,
+      completedOrders,
+      activeProducts: products,
+    };
+  });
+}
+
+/** Recently sold / completed listings for activity feeds. */
+export async function getRecentlySold(limit = 8): Promise<ProductCardData[]> {
+  return memo(`recently-sold-${limit}`, 180_000, async () => {
+    const rows = await prisma.product.findMany({
+      where: { status: "sold" },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      select: cardSelect,
+    });
+    if (rows.length) return rows.map(toCard);
+    // Fallback: products attached to recent completed orders
+    const items = await prisma.orderItem.findMany({
+      where: { order: { status: "completed" } },
+      orderBy: { order: { createdAt: "desc" } },
+      take: limit,
+      select: {
+        product: { select: cardSelect },
+      },
+    });
+    return items.filter((i) => i.product).map((i) => toCard(i.product!));
   });
 }

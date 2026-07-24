@@ -15,11 +15,13 @@ import {
   ScrollText,
   Users,
   ImageIcon,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
 const ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/health", label: "System health", icon: Activity },
   { href: "/admin/sync", label: "Synchronization", icon: RefreshCw },
   { href: "/admin/pricing", label: "Pricing", icon: Tags },
   { href: "/admin/products", label: "Products", icon: Package },

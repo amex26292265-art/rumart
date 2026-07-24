@@ -39,11 +39,19 @@ function hasSessionCookie(request: NextRequest): boolean {
 
 /** Anonymous-safe pages — same HTML for every visitor. */
 function isAnonymousCatalog(pathname: string): boolean {
-  if (pathname === "/" || pathname === "/marketplace" || pathname === "/categories" || pathname === "/faq") {
+  if (
+    pathname === "/" ||
+    pathname === "/marketplace" ||
+    pathname === "/categories" ||
+    pathname === "/faq" ||
+    pathname === "/community"
+  ) {
     return true;
   }
   if (pathname.startsWith("/product/")) return true;
+  if (pathname.startsWith("/community/")) return true;
   if (pathname.startsWith("/seller/") && pathname !== "/seller") return true;
+  if (pathname.startsWith("/u/")) return true;
   return false;
 }
 

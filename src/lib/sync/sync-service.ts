@@ -308,6 +308,21 @@ export async function runAllRules(): Promise<{
     invalidate("newest-");
     invalidate("ai-products-");
     invalidate("cat-");
+    try {
+      const { recordActivity } = await import("@/lib/activity");
+      const { discordEvent } = await import("@/lib/discord");
+      if (imported > 0) {
+        await recordActivity({
+          type: "product_added",
+          title: `${imported} new listings synced`,
+          body: `Updated ${updated} · removed ${removed}`,
+          href: "/marketplace",
+        });
+      }
+      await discordEvent("Sync complete", `Imported ${imported}, updated ${updated}, removed ${removed}.`);
+    } catch {
+      /* best-effort */
+    }
     return { imported, updated, removed, runId: run.id };
   } catch (err) {
     await prisma.syncRun.update({

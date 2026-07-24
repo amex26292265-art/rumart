@@ -8,6 +8,7 @@ import type {
 import { lztMarket, type LztRawItem, type LztPurchaseResponse } from "./service";
 import { buildAccountInfo } from "./account-info";
 import { buildMarketplaceTitle, hasFullCapture, isJunkTitle } from "./titles";
+import { buildProfessionalDescription } from "./descriptions";
 
 /**
  * The category slugs the LZT Market API actually accepts at /market/{slug}.
@@ -147,12 +148,19 @@ function mapItem(raw: LztRawItem, supplierCategory: string): SupplierListing | n
   const title = buildMarketplaceTitle(supplierCategory, titleAttrs, sanitizedFallback);
   if (isJunkTitle(title)) return null;
 
+  const description =
+    buildProfessionalDescription({
+      categorySlug: supplierCategory,
+      title,
+      attrs: titleAttrs,
+    }) ||
+    (info.summary ? sanitizeSupplier(info.summary) || undefined : undefined);
+
   return {
     images: extractImages(raw),
     supplierItemId: String(raw.item_id),
     title,
-    // Clean, English, auto-generated summary (never a raw foreign-language blob).
-    description: info.summary ? sanitizeSupplier(info.summary) || undefined : undefined,
+    description,
     // We request prices in USD (currency=usd), so `price` is already USD.
     cost: Number(raw.price) || 0,
     currency: (raw.price_currency || "USD").toUpperCase(),

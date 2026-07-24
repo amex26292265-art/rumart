@@ -13,7 +13,11 @@ export const dynamic = "force-dynamic";
 export default function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-paper">
-      <Suspense fallback={<Navbar signedIn={false} walletBalance={0} unreadNotifications={0} />}>
+      <Suspense
+        fallback={
+          <Navbar signedIn={false} walletBalance={0} unreadNotifications={0} unreadMessages={0} />
+        }
+      >
         <NavbarAuth />
       </Suspense>
       <main className="flex-1">{children}</main>
@@ -28,7 +32,7 @@ async function NavbarAuth() {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!userId) {
-    return <Navbar signedIn={false} walletBalance={0} unreadNotifications={0} />;
+    return <Navbar signedIn={false} walletBalance={0} unreadNotifications={0} unreadMessages={0} />;
   }
 
   const user = await prisma.user.findUnique({
@@ -39,11 +43,38 @@ async function NavbarAuth() {
     },
   });
 
+  let unreadMessages = 0;
+  try {
+    const parts = await prisma.conversationParticipant.findMany({
+      where: { userId },
+      select: {
+        lastReadAt: true,
+        conversation: {
+          select: {
+            messages: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: { senderId: true, createdAt: true },
+            },
+          },
+        },
+      },
+    });
+    unreadMessages = parts.filter((p) => {
+      const last = p.conversation.messages[0];
+      if (!last || last.senderId === userId) return false;
+      return !p.lastReadAt || last.createdAt > p.lastReadAt;
+    }).length;
+  } catch {
+    unreadMessages = 0;
+  }
+
   return (
     <Navbar
       signedIn
       walletBalance={user?.walletBalance ?? 0}
       unreadNotifications={user?._count.notifications ?? 0}
+      unreadMessages={unreadMessages}
     />
   );
 }

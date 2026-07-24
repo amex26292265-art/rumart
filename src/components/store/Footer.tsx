@@ -8,28 +8,28 @@ export async function Footer() {
   const settings = await getSiteSettings();
   const groups = [
     {
-      title: "Marketplace",
+      title: "Ecosystem",
       links: [
-        { href: "/marketplace", label: "Browse all" },
+        { href: "/marketplace", label: "Marketplace" },
+        { href: "/community", label: "Community" },
         { href: "/categories", label: "Categories" },
-        { href: "/marketplace?sort=newest", label: "Newest arrivals" },
-        { href: "/categories#ai", label: "AI subscriptions" },
+        { href: "/sell", label: "Become a seller" },
       ],
     },
     {
       title: "Account",
       links: [
-        { href: "/account", label: "Dashboard" },
-        { href: "/account/orders", label: "My orders" },
+        { href: "/account", label: "Hub" },
+        { href: "/messages", label: "Messages" },
         { href: "/wallet", label: "Wallet" },
-        { href: "/account/wishlist", label: "Wishlist" },
+        { href: "/account/profile", label: "Profile" },
       ],
     },
     {
       title: "Company",
       links: [
         { href: "/faq", label: "FAQ" },
-        { href: "/sell", label: "Become a seller" },
+        { href: "/community/guides", label: "Guides" },
         { href: "/faq", label: "How it works" },
         { href: "/login", label: "Sign in" },
       ],
@@ -42,7 +42,7 @@ export async function Footer() {
         <div>
           <Logo showOwner />
           <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-500">
-            Premium digital marketplace for game accounts, AI tools, and software — instant encrypted delivery.
+            Digital trading ecosystem — marketplace, community, sellers, and live activity. Instant encrypted delivery.
           </p>
           <a
             href={settings.telegramUrl}

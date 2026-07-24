@@ -17,6 +17,13 @@ export async function applyAsSeller(input: {
   displayName: string;
   bio?: string;
   experience?: string;
+  categories?: string;
+  country?: string;
+  portfolio?: string;
+  discord?: string;
+  telegram?: string;
+  website?: string;
+  reason?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   const userId = (session?.user as { id?: string } | undefined)?.id;
@@ -39,9 +46,25 @@ export async function applyAsSeller(input: {
       displayName,
       bio: input.bio?.trim() || null,
       experience: input.experience?.trim() || null,
+      categories: input.categories?.trim() || null,
+      country: input.country?.trim() || null,
+      portfolio: input.portfolio?.trim() || null,
+      discord: input.discord?.trim() || null,
+      telegram: input.telegram?.trim() || null,
+      website: input.website?.trim() || null,
+      reason: input.reason?.trim() || null,
     },
   });
   await writeAudit(userId, "seller.apply", { displayName });
+  try {
+    const { discordEvent } = await import("@/lib/discord");
+    await discordEvent("Seller application", `${displayName} applied to sell on Rumart.`, [
+      { name: "Categories", value: input.categories?.trim() || "—", inline: true },
+      { name: "Country", value: input.country?.trim() || "—", inline: true },
+    ]);
+  } catch {
+    /* optional */
+  }
   revalidatePath("/sell");
   revalidatePath("/admin/sellers");
   return { ok: true };

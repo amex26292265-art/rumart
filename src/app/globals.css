@@ -198,9 +198,19 @@ select.field:focus {
 .hero-enter {
   animation: hero-enter 0.55s ease-out both;
 }
+
+@keyframes ecosystem-aurora {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.35; }
+  50% { transform: translate(8%, 6%) scale(1.08); opacity: 0.55; }
+}
+.ecosystem-aurora {
+  animation: ecosystem-aurora 12s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hero-enter,
-  .coming-soon-fade {
+  .coming-soon-fade,
+  .ecosystem-aurora {
     animation: none;
   }
 }

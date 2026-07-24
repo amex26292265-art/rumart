@@ -170,7 +170,214 @@ export async function POST(request: Request) {
      WHERE NOT EXISTS (SELECT 1 FROM "Supplier" WHERE "slug" = 'manual')`,
   );
 
-  // Update admin email/password is handled via Worker secrets + seed login.
+  // ─── Rumart V3: profiles, forum, messaging, activity ─────────────────────
+  for (const col of [
+    ["username", "TEXT"],
+    ["bio", "TEXT"],
+    ["avatarUrl", "TEXT"],
+    ["bannerUrl", "TEXT"],
+    ["discord", "TEXT"],
+    ["telegram", "TEXT"],
+    ["website", "TEXT"],
+    ["country", "TEXT"],
+  ] as const) {
+    await run(`user.${col[0]}`, `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "${col[0]}" ${col[1]}`);
+  }
+  await run(
+    "user.username unique",
+    `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
+  );
+
+  for (const col of [
+    ["categories", "TEXT"],
+    ["country", "TEXT"],
+    ["portfolio", "TEXT"],
+    ["discord", "TEXT"],
+    ["telegram", "TEXT"],
+    ["website", "TEXT"],
+    ["reason", "TEXT"],
+  ] as const) {
+    await run(
+      `sellerApp.${col[0]}`,
+      `ALTER TABLE "SellerApplication" ADD COLUMN IF NOT EXISTS "${col[0]}" ${col[1]}`,
+    );
+  }
+  await run(
+    "sellerProfile.level",
+    `ALTER TABLE "SellerProfile" ADD COLUMN IF NOT EXISTS "level" INTEGER NOT NULL DEFAULT 1`,
+  );
+  await run(
+    "sellerProfile.reputation",
+    `ALTER TABLE "SellerProfile" ADD COLUMN IF NOT EXISTS "reputation" INTEGER NOT NULL DEFAULT 0`,
+  );
+  await run(
+    "sellerProfile.followerCount",
+    `ALTER TABLE "SellerProfile" ADD COLUMN IF NOT EXISTS "followerCount" INTEGER NOT NULL DEFAULT 0`,
+  );
+
+  await run(
+    "ForumCategory",
+    `CREATE TABLE IF NOT EXISTS "ForumCategory" (
+      "id" TEXT PRIMARY KEY,
+      "slug" TEXT NOT NULL UNIQUE,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "icon" TEXT,
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "topicCount" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "ForumTopic",
+    `CREATE TABLE IF NOT EXISTS "ForumTopic" (
+      "id" TEXT PRIMARY KEY,
+      "categoryId" TEXT NOT NULL,
+      "authorId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "slug" TEXT NOT NULL UNIQUE,
+      "body" TEXT NOT NULL,
+      "kind" TEXT NOT NULL DEFAULT 'discussion',
+      "pinned" BOOLEAN NOT NULL DEFAULT false,
+      "locked" BOOLEAN NOT NULL DEFAULT false,
+      "views" INTEGER NOT NULL DEFAULT 0,
+      "replyCount" INTEGER NOT NULL DEFAULT 0,
+      "lastReplyAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "ForumPost",
+    `CREATE TABLE IF NOT EXISTS "ForumPost" (
+      "id" TEXT PRIMARY KEY,
+      "topicId" TEXT NOT NULL,
+      "authorId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "imageUrl" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "ForumReaction",
+    `CREATE TABLE IF NOT EXISTS "ForumReaction" (
+      "id" TEXT PRIMARY KEY,
+      "postId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "emoji" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "Follow",
+    `CREATE TABLE IF NOT EXISTS "Follow" (
+      "id" TEXT PRIMARY KEY,
+      "followerId" TEXT NOT NULL,
+      "followingId" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "Conversation",
+    `CREATE TABLE IF NOT EXISTS "Conversation" (
+      "id" TEXT PRIMARY KEY,
+      "kind" TEXT NOT NULL DEFAULT 'dm',
+      "orderRef" TEXT,
+      "subject" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "ConversationParticipant",
+    `CREATE TABLE IF NOT EXISTS "ConversationParticipant" (
+      "id" TEXT PRIMARY KEY,
+      "conversationId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "lastReadAt" TIMESTAMP(3),
+      "typingAt" TIMESTAMP(3),
+      "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "Message",
+    `CREATE TABLE IF NOT EXISTS "Message" (
+      "id" TEXT PRIMARY KEY,
+      "conversationId" TEXT NOT NULL,
+      "senderId" TEXT NOT NULL,
+      "body" TEXT NOT NULL,
+      "attachmentUrl" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+  await run(
+    "ActivityEvent",
+    `CREATE TABLE IF NOT EXISTS "ActivityEvent" (
+      "id" TEXT PRIMARY KEY,
+      "type" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "body" TEXT,
+      "href" TEXT,
+      "meta" TEXT,
+      "userId" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  );
+
+  await run("idx ForumTopic cat", `CREATE INDEX IF NOT EXISTS "ForumTopic_categoryId_lastReplyAt_idx" ON "ForumTopic"("categoryId", "lastReplyAt")`);
+  await run("idx ForumTopic created", `CREATE INDEX IF NOT EXISTS "ForumTopic_createdAt_idx" ON "ForumTopic"("createdAt")`);
+  await run("idx ForumPost topic", `CREATE INDEX IF NOT EXISTS "ForumPost_topicId_createdAt_idx" ON "ForumPost"("topicId", "createdAt")`);
+  await run("uq ForumReaction", `CREATE UNIQUE INDEX IF NOT EXISTS "ForumReaction_postId_userId_emoji_key" ON "ForumReaction"("postId", "userId", "emoji")`);
+  await run("uq Follow", `CREATE UNIQUE INDEX IF NOT EXISTS "Follow_followerId_followingId_key" ON "Follow"("followerId", "followingId")`);
+  await run("idx Follow following", `CREATE INDEX IF NOT EXISTS "Follow_followingId_idx" ON "Follow"("followingId")`);
+  await run("uq ConvPart", `CREATE UNIQUE INDEX IF NOT EXISTS "ConversationParticipant_conversationId_userId_key" ON "ConversationParticipant"("conversationId", "userId")`);
+  await run("idx ConvPart user", `CREATE INDEX IF NOT EXISTS "ConversationParticipant_userId_idx" ON "ConversationParticipant"("userId")`);
+  await run("idx Message conv", `CREATE INDEX IF NOT EXISTS "Message_conversationId_createdAt_idx" ON "Message"("conversationId", "createdAt")`);
+  await run("idx Activity created", `CREATE INDEX IF NOT EXISTS "ActivityEvent_createdAt_idx" ON "ActivityEvent"("createdAt")`);
+  await run("idx Activity type", `CREATE INDEX IF NOT EXISTS "ActivityEvent_type_createdAt_idx" ON "ActivityEvent"("type", "createdAt")`);
+
+  for (const [label, sql] of [
+    ["fk ForumTopic.categoryId", `"ForumTopic" ADD CONSTRAINT "ForumTopic_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "ForumCategory"("id") ON DELETE CASCADE`],
+    ["fk ForumTopic.authorId", `"ForumTopic" ADD CONSTRAINT "ForumTopic_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk ForumPost.topicId", `"ForumPost" ADD CONSTRAINT "ForumPost_topicId_fkey" FOREIGN KEY ("topicId") REFERENCES "ForumTopic"("id") ON DELETE CASCADE`],
+    ["fk ForumPost.authorId", `"ForumPost" ADD CONSTRAINT "ForumPost_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk ForumReaction.postId", `"ForumReaction" ADD CONSTRAINT "ForumReaction_postId_fkey" FOREIGN KEY ("postId") REFERENCES "ForumPost"("id") ON DELETE CASCADE`],
+    ["fk ForumReaction.userId", `"ForumReaction" ADD CONSTRAINT "ForumReaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk Follow.followerId", `"Follow" ADD CONSTRAINT "Follow_followerId_fkey" FOREIGN KEY ("followerId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk Follow.followingId", `"Follow" ADD CONSTRAINT "Follow_followingId_fkey" FOREIGN KEY ("followingId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk ConvPart.conversationId", `"ConversationParticipant" ADD CONSTRAINT "ConversationParticipant_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE`],
+    ["fk ConvPart.userId", `"ConversationParticipant" ADD CONSTRAINT "ConversationParticipant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk Message.conversationId", `"Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE`],
+    ["fk Message.senderId", `"Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE CASCADE`],
+    ["fk ActivityEvent.userId", `"ActivityEvent" ADD CONSTRAINT "ActivityEvent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL`],
+  ] as const) {
+    await run(
+      label,
+      `DO $$ BEGIN ALTER TABLE ${sql}; EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    );
+  }
+
+  // Seed forum categories
+  const forumCats: [string, string, string, number][] = [
+    ["marketplace", "Marketplace", "Listings, deals, and trading talk", 0],
+    ["guides", "Guides", "How-tos and walkthroughs", 1],
+    ["questions", "Q&A", "Ask the community", 2],
+    ["services", "Services", "Offer or find digital services", 3],
+    ["gaming", "Gaming", "Games, accounts, and ranks", 4],
+    ["ai", "AI", "ChatGPT, Claude, Midjourney & more", 5],
+    ["software", "Software", "Tools, licenses, and stacks", 6],
+    ["hosting", "Hosting", "Servers, domains, VPNs", 7],
+    ["programming", "Programming", "Dev talk and snippets", 8],
+  ];
+  for (const [slug, name, description, sortOrder] of forumCats) {
+    await run(
+      `forum seed ${slug}`,
+      `INSERT INTO "ForumCategory" ("id", "slug", "name", "description", "sortOrder", "topicCount", "createdAt")
+       SELECT gen_random_uuid()::text, '${slug}', '${name}', '${description}', ${sortOrder}, 0, CURRENT_TIMESTAMP
+       WHERE NOT EXISTS (SELECT 1 FROM "ForumCategory" WHERE "slug" = '${slug}')`,
+    );
+  }
 
   const failed = steps.filter((s) => s.startsWith("fail"));
   return NextResponse.json({

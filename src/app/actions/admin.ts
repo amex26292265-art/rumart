@@ -273,6 +273,8 @@ export async function reviewSellerApplication(
         badge: "verified",
         verified: true,
         status: "active",
+        level: 1,
+        reputation: 10,
       },
     }),
     prisma.user.update({ where: { id: app.userId }, data: { role: "seller" } }),
@@ -285,8 +287,26 @@ export async function reviewSellerApplication(
     }),
   ]);
 
+  try {
+    const { recordActivity } = await import("@/lib/activity");
+    const { discordEvent } = await import("@/lib/discord");
+    await recordActivity({
+      type: "seller_joined",
+      title: `${app.displayName} joined as a seller`,
+      body: "Verified seller",
+      href: `/seller/${slug}`,
+      userId: app.userId,
+    });
+    await discordEvent("Seller approved", `${app.displayName} is now a Rumart seller.`, [
+      { name: "Slug", value: slug, inline: true },
+    ]);
+  } catch {
+    /* best-effort */
+  }
+
   revalidatePath("/admin/sellers");
   revalidatePath("/seller");
+  revalidatePath("/");
   return { ok: true };
 }
 
