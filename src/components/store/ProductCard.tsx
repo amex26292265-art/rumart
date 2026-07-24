@@ -1,7 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { Heart, ShieldCheck, Zap, Mail } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrandIcon } from "@/components/brand/BrandIcon";
@@ -23,6 +20,7 @@ export interface ProductCardData {
   images?: string[] | null;
 }
 
+/** Server Component — CSS hover only (no framer-motion per card). */
 export function ProductCard({ product }: { product: ProductCardData }) {
   const a = product.attributes ?? {};
   const country = typeof a.country === "string" ? a.country : null;
@@ -52,12 +50,8 @@ export function ProductCard({ product }: { product: ProductCardData }) {
   const cardImage = (product.images ?? []).find((u) => u.startsWith("https://")) ?? null;
 
   return (
-    <motion.article
-      whileHover={{ y: -6 }}
-      transition={{ type: "spring", stiffness: 320, damping: 24 }}
-      className="card group relative flex flex-col overflow-hidden transition-shadow hover:shadow-[0_0_32px_rgba(139,92,246,0.18)]"
-    >
-      <Link href={`/product/${product.slug}`} prefetch={false} className="block">
+    <article className="card product-card group relative flex flex-col overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-1.5 hover:shadow-[0_0_32px_rgba(139,92,246,0.18)]">
+      <Link href={`/product/${product.slug}`} className="block">
         <div
           className="relative flex aspect-[16/10] items-center justify-center overflow-hidden"
           style={{
@@ -68,8 +62,9 @@ export function ProductCard({ product }: { product: ProductCardData }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={cardImage}
-              alt={product.title}
+              alt=""
               loading="lazy"
+              decoding="async"
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
@@ -82,18 +77,17 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           <span className="absolute left-3 top-3">
             <Badge tone="dark">{product.categoryName}</Badge>
           </span>
-          <button
-            aria-label="Add to wishlist"
-            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-mist-100/90 text-ink-500 backdrop-blur transition-colors hover:text-rose-400"
-            onClick={(e) => e.preventDefault()}
+          <span
+            aria-hidden
+            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-mist-100/90 text-ink-500"
           >
             <Heart className="h-4 w-4" />
-          </button>
+          </span>
         </div>
       </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
-        <Link href={`/product/${product.slug}`} prefetch={false}>
+        <Link href={`/product/${product.slug}`}>
           <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink-950 transition-colors group-hover:text-accent-400">
             {product.title}
           </h3>
@@ -139,6 +133,6 @@ export function ProductCard({ product }: { product: ProductCardData }) {
           </span>
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }

@@ -94,13 +94,13 @@ h1, h2, h3, .font-display {
 }
 
 @utility card {
-  background: color-mix(in srgb, var(--color-mist-100) 88%, transparent);
+  /* Solid fill — backdrop-filter on every product card was a major paint cost. */
+  background: var(--color-mist-100);
   border: 1px solid color-mix(in srgb, var(--color-mist-300) 80%, transparent);
   border-radius: var(--radius-xl2);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-accent-500) 4%, transparent),
     0 12px 40px -20px rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(12px);
 }
 
 @utility glass {
@@ -190,4 +190,18 @@ select.field:focus {
 .coming-soon-delay-1 { animation-delay: 0.1s; }
 .coming-soon-delay-2 { animation-delay: 0.2s; }
 .coming-soon-delay-3 { animation-delay: 0.35s; }
+
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-enter {
+  animation: hero-enter 0.55s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-enter,
+  .coming-soon-fade {
+    animation: none;
+  }
+}
 

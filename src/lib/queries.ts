@@ -3,10 +3,52 @@ import type { Prisma } from "@prisma/client";
 import type { ProductCardData } from "@/components/store/ProductCard";
 import { memo } from "@/lib/cache";
 
-/** Shape a Product row (with its category) into card data for the UI. */
-function toCard(
-  p: Prisma.ProductGetPayload<{ include: { category: true } }>,
-): ProductCardData {
+/** Only fields needed for marketplace/home cards — never pull credentialStock. */
+const cardSelect = {
+  id: true,
+  slug: true,
+  title: true,
+  description: true,
+  price: true,
+  currency: true,
+  deliveryType: true,
+  images: true,
+  attributes: true,
+  category: {
+    select: { name: true, slug: true, icon: true, accent: true },
+  },
+} satisfies Prisma.ProductSelect;
+
+type CardRow = Prisma.ProductGetPayload<{ select: typeof cardSelect }>;
+
+/** Strip huge attribute blobs (full game libraries, etc.) down to UI fields. */
+function slimAttributes(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const a = raw as Record<string, unknown>;
+  const games = Array.isArray(a.games) ? (a.games as unknown[]).slice(0, 8) : undefined;
+  const stats = Array.isArray(a.stats) ? (a.stats as unknown[]).slice(0, 6) : undefined;
+  return {
+    country: a.country,
+    warranty: a.warranty,
+    emailNative: a.emailNative,
+    sda: a.sda,
+    personal: a.personal,
+    vac: a.vac,
+    level: a.level,
+    registerDate: a.registerDate,
+    lastActivity: a.lastActivity,
+    ...(games ? { games } : {}),
+    ...(stats ? { stats } : {}),
+  };
+}
+
+function slimImages(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const https = raw.filter((u): u is string => typeof u === "string" && u.startsWith("https://"));
+  return https.length ? https.slice(0, 2) : null;
+}
+
+function toCard(p: CardRow): ProductCardData {
   return {
     id: p.id,
     slug: p.slug,
@@ -19,13 +61,12 @@ function toCard(
     categorySlug: p.category.slug,
     categoryIcon: p.category.icon,
     accent: p.category.accent,
-    attributes: (p.attributes as Record<string, unknown> | null) ?? null,
-    images: (p.images as string[] | null) ?? null,
+    attributes: slimAttributes(p.attributes),
+    images: slimImages(p.images),
   };
 }
 
 export async function getFeaturedCategories() {
-  // Cached ~5 min — the homepage category grid is the same for everyone.
   return memo("cat-featured", 300_000, () =>
     prisma.category.findMany({
       where: { featured: true },
@@ -45,23 +86,23 @@ export async function getAllCategories() {
 }
 
 export async function getTrending(limit = 8): Promise<ProductCardData[]> {
-  // Cached ~5 min — homepage "Trending now" is identical for all visitors.
   return memo(`trending-${limit}`, 300_000, async () => {
-    // Lead with Steam accounts (flagship, and they carry game-cover images).
-    const steam = await prisma.product.findMany({
-      where: { status: "active", category: { slug: "steam" } },
-      orderBy: [{ createdAt: "desc" }],
-      take: limit,
-      include: { category: true },
-    });
+    const [steam, rest] = await Promise.all([
+      prisma.product.findMany({
+        where: { status: "active", category: { slug: "steam" } },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: cardSelect,
+      }),
+      prisma.product.findMany({
+        where: { status: "active", NOT: { category: { slug: "steam" } } },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: cardSelect,
+      }),
+    ]);
     if (steam.length >= limit) return steam.map(toCard);
-    const rest = await prisma.product.findMany({
-      where: { status: "active", NOT: { category: { slug: "steam" } } },
-      orderBy: { createdAt: "desc" },
-      take: limit - steam.length,
-      include: { category: true },
-    });
-    return [...steam, ...rest].map(toCard);
+    return [...steam, ...rest].slice(0, limit).map(toCard);
   });
 }
 
@@ -70,7 +111,7 @@ export async function getRecent(limit = 8): Promise<ProductCardData[]> {
     where: { status: "active" },
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: { category: true },
+    select: cardSelect,
   });
   return rows.map(toCard);
 }
@@ -94,20 +135,15 @@ const AI_SLUGS = [
 
 export async function getAiProducts(limit = 8): Promise<ProductCardData[]> {
   return memo(`ai-products-${limit}`, 300_000, async () => {
+    // Category slug filter only — avoid expensive ILIKE title scans on Neon.
     const rows = await prisma.product.findMany({
       where: {
         status: "active",
-        OR: [
-          { category: { slug: { in: AI_SLUGS } } },
-          { title: { contains: "ChatGPT", mode: "insensitive" } },
-          { title: { contains: "Claude", mode: "insensitive" } },
-          { title: { contains: "Cursor", mode: "insensitive" } },
-          { title: { contains: "Midjourney", mode: "insensitive" } },
-        ],
+        category: { slug: { in: AI_SLUGS } },
       },
       orderBy: { createdAt: "desc" },
       take: limit,
-      include: { category: true },
+      select: cardSelect,
     });
     return rows.map(toCard);
   });
@@ -119,12 +155,12 @@ export interface MarketplaceFilters {
   min?: number;
   max?: number;
   country?: string;
-  delivery?: string; // auto | manual
+  delivery?: string;
   emailNative?: boolean;
-  vac?: string; // "no" (exclude) | "yes" (only)
+  vac?: string;
   levelMin?: number;
   levelMax?: number;
-  sort?: string; // newest | priceAsc | priceDesc
+  sort?: string;
   page?: number;
   pageSize?: number;
 }
@@ -164,7 +200,7 @@ export async function getMarketplace(filters: MarketplaceFilters) {
       orderBy,
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { category: true },
+      select: cardSelect,
     }),
   ]);
 
@@ -173,13 +209,15 @@ export async function getMarketplace(filters: MarketplaceFilters) {
 
 /** Distinct countries currently in the catalog (for the country filter). */
 export async function getAvailableCountries(): Promise<string[]> {
-  const rows = await prisma.product.findMany({
-    where: { status: "active", country: { not: null } },
-    distinct: ["country"],
-    select: { country: true },
-    orderBy: { country: "asc" },
+  return memo("countries-active", 600_000, async () => {
+    const rows = await prisma.product.findMany({
+      where: { status: "active", country: { not: null } },
+      distinct: ["country"],
+      select: { country: true },
+      orderBy: { country: "asc" },
+    });
+    return rows.map((r) => r.country!).filter(Boolean);
   });
-  return rows.map((r) => r.country!).filter(Boolean);
 }
 
 export async function getProductBySlug(slug: string) {
@@ -189,8 +227,9 @@ export async function getProductBySlug(slug: string) {
       category: true,
       reviews: {
         where: { status: "published" },
-        include: { user: true },
+        include: { user: { select: { id: true, name: true, email: true } } },
         orderBy: { createdAt: "desc" },
+        take: 12,
       },
       seller: true,
     },
@@ -199,10 +238,12 @@ export async function getProductBySlug(slug: string) {
 
 /** Real headline stats — counts from the DB, never fabricated. */
 export async function getStoreStats() {
-  const [products, categories, completedOrders] = await Promise.all([
-    prisma.product.count({ where: { status: "active" } }),
-    prisma.category.count(),
-    prisma.order.count({ where: { status: "completed" } }),
-  ]);
-  return { products, categories, completedOrders };
+  return memo("store-stats", 300_000, async () => {
+    const [products, categories, completedOrders] = await Promise.all([
+      prisma.product.count({ where: { status: "active" } }),
+      prisma.category.count(),
+      prisma.order.count({ where: { status: "completed" } }),
+    ]);
+    return { products, categories, completedOrders };
+  });
 }

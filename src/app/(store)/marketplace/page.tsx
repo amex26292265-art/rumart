@@ -2,12 +2,12 @@ import Link from "next/link";
 import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { Stagger, StaggerItem } from "@/components/ui/motion";
 import { ProductRow } from "@/components/store/ProductRow";
 import { MarketplaceFilters, SortSelect } from "@/components/store/MarketplaceFilters";
 import { getAllCategories, getMarketplace, getAvailableCountries } from "@/lib/queries";
 import { filtersForCategory } from "@/lib/filter-config";
 
+/** Workers build has no Neon — runtime-dynamic; categories/countries still memoized. */
 export const dynamic = "force-dynamic";
 
 type Search = { [key: string]: string | string[] | undefined };
@@ -116,13 +116,11 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
               }
             />
           ) : (
-            <Stagger className="space-y-3" stagger={0.03}>
+            <div className="space-y-3">
               {products.map((p) => (
-                <StaggerItem key={p.id}>
-                  <ProductRow product={p} />
-                </StaggerItem>
+                <ProductRow key={p.id} product={p} />
               ))}
-            </Stagger>
+            </div>
           )}
 
           {totalPages > 1 && (

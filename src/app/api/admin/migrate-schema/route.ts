@@ -119,6 +119,10 @@ export async function POST(request: Request) {
     "idx seller payout",
     `CREATE INDEX IF NOT EXISTS "SellerPayout_sellerId_status_idx" ON "SellerPayout"("sellerId", "status")`,
   );
+  await run(
+    "idx notification user read",
+    `CREATE INDEX IF NOT EXISTS "Notification_userId_read_idx" ON "Notification"("userId", "read")`,
+  );
 
   // Foreign keys — ignore if already exist
   await run(

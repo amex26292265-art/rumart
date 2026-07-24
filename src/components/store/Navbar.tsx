@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Search, Menu, X, User, Wallet, Bell, LayoutDashboard } from "lucide-react";
 import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/button";
@@ -36,7 +35,7 @@ export function Navbar({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-mist-300/80 bg-paper/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-mist-300/80 bg-paper/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
         <Link href="/" aria-label="Rumart home">
           <Logo />
@@ -47,7 +46,6 @@ export function Navbar({
             <Link
               key={l.href}
               href={l.href}
-              prefetch={false}
               className="rounded-lg px-3 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-mist-200 hover:text-ink-950"
             >
               {l.label}
@@ -102,6 +100,7 @@ export function Navbar({
             </Link>
           )}
           <button
+            type="button"
             aria-label="Menu"
             onClick={() => setOpen((o) => !o)}
             className="grid h-10 w-10 place-items-center rounded-xl border border-mist-300 text-ink-700 lg:hidden"
@@ -111,70 +110,62 @@ export function Navbar({
         </div>
       </div>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut" }}
-            className="overflow-hidden border-t border-mist-300 lg:hidden"
-          >
-            <div className="flex flex-col gap-2 px-4 py-4">
-              <form onSubmit={submit} className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search accounts…"
-                  className="field !rounded-xl !pl-9"
-                />
-              </form>
-              {LINKS.map((l) => (
+      {open && (
+        <div className="border-t border-mist-300 lg:hidden">
+          <div className="flex flex-col gap-2 px-4 py-4">
+            <form onSubmit={submit} className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search accounts…"
+                className="field !rounded-xl !pl-9"
+              />
+            </form>
+            {LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
+              >
+                {l.label}
+              </Link>
+            ))}
+            {signedIn ? (
+              <>
                 <Link
-                  key={l.href}
-                  href={l.href}
+                  href="/wallet"
                   onClick={() => setOpen(false)}
                   className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
                 >
-                  {l.label}
+                  Wallet · {formatMoney(walletBalance)}
                 </Link>
-              ))}
-              {signedIn ? (
-                <>
-                  <Link
-                    href="/wallet"
-                    onClick={() => setOpen(false)}
-                    className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
-                  >
-                    Wallet · {formatMoney(walletBalance)}
-                  </Link>
-                  <Link
-                    href="/account"
-                    onClick={() => setOpen(false)}
-                    className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
-                  >
-                    Account
-                  </Link>
-                  <Link
-                    href="/account/notifications"
-                    onClick={() => setOpen(false)}
-                    className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
-                  >
-                    Notifications{unreadNotifications > 0 ? ` (${unreadNotifications})` : ""}
-                  </Link>
-                </>
-              ) : (
-                <Link href="/login" onClick={() => setOpen(false)}>
-                  <Button variant="outline" size="sm" className="w-full">
-                    <User className="h-4 w-4" /> Sign in
-                  </Button>
+                <Link
+                  href="/account"
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
+                >
+                  Account
                 </Link>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <Link
+                  href="/account/notifications"
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-ink-700 hover:bg-mist-200"
+                >
+                  Notifications{unreadNotifications > 0 ? ` (${unreadNotifications})` : ""}
+                </Link>
+              </>
+            ) : (
+              <Link href="/login" onClick={() => setOpen(false)}>
+                <Button variant="outline" size="sm" className="w-full">
+                  <User className="h-4 w-4" /> Sign in
+                </Button>
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

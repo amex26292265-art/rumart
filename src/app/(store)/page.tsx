@@ -4,7 +4,6 @@ import { Container } from "@/components/ui/container";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Counter } from "@/components/ui/counter";
-import { Reveal, Stagger, StaggerItem } from "@/components/ui/motion";
 import { Hero } from "@/components/store/Hero";
 import { CategoryBanners } from "@/components/store/CategoryGrid";
 import { SectionHeader } from "@/components/store/SectionHeader";
@@ -15,6 +14,7 @@ import { ProductCard } from "@/components/store/ProductCard";
 import { getFeaturedCategories, getTrending, getStoreStats, getNewest, getAiProducts } from "@/lib/queries";
 import { getSiteSettings } from "@/lib/site-settings";
 
+/** Workers build has no Neon — keep runtime-dynamic; warm isolates still hit memo(). */
 export const dynamic = "force-dynamic";
 
 const WHY = [
@@ -61,13 +61,11 @@ export default async function HomePage() {
       <Container className="py-14">
         <SectionHeader title="Trending now" subtitle="Most viewed live listings" href="/marketplace" />
         {trending.length > 0 ? (
-          <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {trending.map((p) => (
-              <StaggerItem key={p.id}>
-                <ProductCard product={p} />
-              </StaggerItem>
+              <ProductCard key={p.id} product={p} />
             ))}
-          </Stagger>
+          </div>
         ) : (
           <EmptyState
             title="No listings yet"
@@ -84,13 +82,11 @@ export default async function HomePage() {
       <Container className="py-6">
         <SectionHeader title="Newest arrivals" subtitle="Fresh inventory just synced" href="/marketplace?sort=newest" />
         {newest.length > 0 ? (
-          <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {newest.map((p) => (
-              <StaggerItem key={p.id}>
-                <ProductCard product={p} />
-              </StaggerItem>
+              <ProductCard key={p.id} product={p} />
             ))}
-          </Stagger>
+          </div>
         ) : (
           <EmptyState title="Waiting for sync" description="Newest arrivals appear here after the next catalog refresh." />
         )}
@@ -113,13 +109,11 @@ export default async function HomePage() {
             </Link>
           </div>
           {aiProducts.length > 0 ? (
-            <Stagger className="grid grid-cols-2 gap-4 md:grid-cols-4" stagger={0.05}>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {aiProducts.map((p) => (
-                <StaggerItem key={p.id}>
-                  <ProductCard product={p} />
-                </StaggerItem>
+                <ProductCard key={p.id} product={p} />
               ))}
-            </Stagger>
+            </div>
           ) : (
             <div className="card grid gap-3 p-8 text-center sm:grid-cols-2 lg:grid-cols-4">
               {["ChatGPT Plus", "Claude Pro", "Cursor Pro", "Midjourney"].map((name) => (
@@ -140,55 +134,49 @@ export default async function HomePage() {
 
       <Container className="py-14">
         <SectionHeader title="Why Rumart" subtitle="Built by Velexis for serious digital commerce" />
-        <Stagger className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" stagger={0.08}>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {WHY.map((w) => (
-            <StaggerItem key={w.title}>
-              <div className="card h-full p-5">
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-500/15 text-accent-400">
-                  <w.icon className="h-5 w-5" />
-                </span>
-                <h3 className="mt-4 font-semibold text-ink-950">{w.title}</h3>
-                <p className="mt-1.5 text-sm text-ink-500">{w.text}</p>
-              </div>
-            </StaggerItem>
+            <div key={w.title} className="card h-full p-5">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-500/15 text-accent-400">
+                <w.icon className="h-5 w-5" />
+              </span>
+              <h3 className="mt-4 font-semibold text-ink-950">{w.title}</h3>
+              <p className="mt-1.5 text-sm text-ink-500">{w.text}</p>
+            </div>
           ))}
-        </Stagger>
+        </div>
       </Container>
 
       <Container className="py-6">
         <SectionHeader title="Security first" subtitle="Enterprise controls under the hood" />
-        <Reveal>
-          <div className="card grid gap-6 p-6 sm:grid-cols-3">
-            {SECURITY.map((s) => (
-              <div key={s.title} className="flex gap-3">
-                <Shield className="mt-0.5 h-5 w-5 shrink-0 text-accent-400" />
-                <div>
-                  <h3 className="font-semibold text-ink-950">{s.title}</h3>
-                  <p className="mt-1 text-sm text-ink-500">{s.text}</p>
-                </div>
+        <div className="card grid gap-6 p-6 sm:grid-cols-3">
+          {SECURITY.map((s) => (
+            <div key={s.title} className="flex gap-3">
+              <Shield className="mt-0.5 h-5 w-5 shrink-0 text-accent-400" />
+              <div>
+                <h3 className="font-semibold text-ink-950">{s.title}</h3>
+                <p className="mt-1 text-sm text-ink-500">{s.text}</p>
               </div>
-            ))}
-          </div>
-        </Reveal>
+            </div>
+          ))}
+        </div>
       </Container>
 
       <Container className="py-14">
-        <Reveal>
-          <div className="card grid gap-6 p-8 text-center sm:grid-cols-3">
-            <div>
-              <Counter value={stats.products} className="font-display text-4xl font-bold text-ink-950" />
-              <p className="mt-1 text-sm text-ink-500">Live listings</p>
-            </div>
-            <div>
-              <Counter value={stats.categories} className="font-display text-4xl font-bold text-ink-950" />
-              <p className="mt-1 text-sm text-ink-500">Categories</p>
-            </div>
-            <div>
-              <Counter value={stats.completedOrders} className="font-display text-4xl font-bold text-ink-950" />
-              <p className="mt-1 text-sm text-ink-500">Orders delivered</p>
-            </div>
+        <div className="card grid gap-6 p-8 text-center sm:grid-cols-3">
+          <div>
+            <Counter value={stats.products} className="font-display text-4xl font-bold text-ink-950" />
+            <p className="mt-1 text-sm text-ink-500">Live listings</p>
           </div>
-        </Reveal>
+          <div>
+            <Counter value={stats.categories} className="font-display text-4xl font-bold text-ink-950" />
+            <p className="mt-1 text-sm text-ink-500">Categories</p>
+          </div>
+          <div>
+            <Counter value={stats.completedOrders} className="font-display text-4xl font-bold text-ink-950" />
+            <p className="mt-1 text-sm text-ink-500">Orders delivered</p>
+          </div>
+        </div>
       </Container>
 
       <Container className="py-6">

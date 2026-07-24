@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { Heart, Scale, Zap, Mail, ShieldCheck, KeyRound, User, CalendarDays, Activity } from "lucide-react";
 import { BrandIcon } from "@/components/brand/BrandIcon";
 import { formatMoney } from "@/lib/utils";
@@ -9,6 +8,7 @@ import { countryLabel } from "@/lib/countries";
 import { useLocalList } from "./useLocalList";
 import type { ProductCardData } from "./ProductCard";
 
+/** Client only for wishlist/compare — no framer-motion (CSS hover). */
 export function ProductRow({ product }: { product: ProductCardData }) {
   const wishlist = useLocalList("rumart:wishlist");
   const compare = useLocalList("rumart:compare");
@@ -30,14 +30,9 @@ export function ProductRow({ product }: { product: ProductCardData }) {
   const href = `/product/${product.slug}`;
 
   return (
-    <motion.article
-      whileHover={{ y: -2 }}
-      transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="card group relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-[0_0_28px_rgba(139,92,246,0.15)] sm:flex-row"
-    >
+    <article className="card group relative flex flex-col gap-4 p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_rgba(139,92,246,0.15)] sm:flex-row">
       <Link
         href={href}
-        prefetch={false}
         className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl text-white sm:h-20 sm:w-20"
         style={{ background: `linear-gradient(135deg, ${product.accent ?? "#7c3aed"}, #07070b 150%)` }}
       >
@@ -46,7 +41,7 @@ export function ProductRow({ product }: { product: ProductCardData }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <Link href={href} prefetch={false} className="min-w-0">
+          <Link href={href} className="min-w-0">
             <h3 className="truncate text-[15px] font-semibold text-ink-950 transition-colors group-hover:text-accent-400">
               {product.title}
             </h3>
@@ -108,14 +103,13 @@ export function ProductRow({ product }: { product: ProductCardData }) {
           </IconButton>
           <Link
             href={href}
-            prefetch={false}
             className="rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_0_16px_rgba(139,92,246,0.3)] transition-opacity hover:opacity-90"
           >
             Buy
           </Link>
         </div>
       </div>
-    </motion.article>
+    </article>
   );
 }
 
@@ -156,6 +150,7 @@ function IconButton({
 }) {
   return (
     <button
+      type="button"
       aria-label={label}
       onClick={onClick}
       className={`grid h-9 w-9 place-items-center rounded-xl border transition-colors ${

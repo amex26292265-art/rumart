@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { Search, Zap, ShieldCheck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
@@ -11,7 +10,6 @@ import { LogoMark } from "@/components/brand/Logo";
 
 export function Hero() {
   const router = useRouter();
-  const reduced = useReducedMotion();
   const [query, setQuery] = useState("");
 
   const submit = (e: React.FormEvent) => {
@@ -23,12 +21,7 @@ export function Hero() {
     <section className="relative overflow-hidden pb-20 pt-16 sm:pt-24">
       <BackdropArt />
       <Container className="relative">
-        <motion.div
-          initial={reduced ? false : { opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, ease: [0.21, 0.65, 0.35, 1] }}
-          className="mx-auto max-w-4xl text-center"
-        >
+        <div className="hero-enter mx-auto max-w-4xl text-center">
           <div className="mb-6 flex justify-center">
             <LogoMark className="h-16 w-16 shadow-[0_0_48px_rgba(139,92,246,0.45)]" />
           </div>
@@ -69,7 +62,7 @@ export function Hero() {
               <Wallet className="h-4 w-4 text-accent-400" /> Crypto wallet top-up
             </span>
           </div>
-        </motion.div>
+        </div>
       </Container>
     </section>
   );
