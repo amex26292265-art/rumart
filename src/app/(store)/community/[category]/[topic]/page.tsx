@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { Container } from "@/components/ui/container";
 import { prisma } from "@/lib/prisma";
-import { TopicReplyForm, ReactionBar } from "../TopicActions";
+import { TopicReplyForm, ReactionBar } from "../../TopicActions";
 
 export const dynamic = "force-dynamic";
 

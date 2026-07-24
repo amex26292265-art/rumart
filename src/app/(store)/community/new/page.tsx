@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ensureForumSeeded } from "@/app/actions/forum";
 import { prisma } from "@/lib/prisma";
-import { NewTopicForm } from "./NewTopicForm";
+import { NewTopicForm } from "../NewTopicForm";
 
 export const dynamic = "force-dynamic";
 

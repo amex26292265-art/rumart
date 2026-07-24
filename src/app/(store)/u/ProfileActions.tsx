@@ -13,7 +13,7 @@ export function FollowButton({ userId, initial }: { userId: string; initial: boo
   return (
     <Button
       size="sm"
-      variant={following ? "outline" : "default"}
+      variant={following ? "outline" : "primary"}
       disabled={loading}
       onClick={async () => {
         setLoading(true);
