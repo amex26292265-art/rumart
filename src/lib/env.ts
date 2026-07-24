@@ -27,6 +27,11 @@ const schema = z.object({
   NOWPAYMENTS_API_KEY: z.string().default(""),
   NOWPAYMENTS_IPN_SECRET: z.string().default(""),
   NOWPAYMENTS_PUBLIC_KEY: z.string().default(""),
+  // RedotPay Connect (optional — RSA-signed OpenAPI).
+  REDOTPAY_APP_KEY: z.string().default(""),
+  REDOTPAY_PRIVATE_KEY: z.string().default(""),
+  REDOTPAY_KEY_VERSION: z.string().default("1"),
+  REDOTPAY_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
 });
 
 type Env = z.infer<typeof schema>;
@@ -45,6 +50,10 @@ const source = {
   NOWPAYMENTS_API_KEY: process.env.NOWPAYMENTS_API_KEY,
   NOWPAYMENTS_IPN_SECRET: process.env.NOWPAYMENTS_IPN_SECRET,
   NOWPAYMENTS_PUBLIC_KEY: process.env.NOWPAYMENTS_PUBLIC_KEY,
+  REDOTPAY_APP_KEY: process.env.REDOTPAY_APP_KEY,
+  REDOTPAY_PRIVATE_KEY: process.env.REDOTPAY_PRIVATE_KEY,
+  REDOTPAY_KEY_VERSION: process.env.REDOTPAY_KEY_VERSION,
+  REDOTPAY_ENV: process.env.REDOTPAY_ENV === "production" ? "production" : "sandbox",
 };
 
 const parsed = schema.safeParse(source);
@@ -57,7 +66,7 @@ const fallback: Env = {
   AUTH_SECRET: process.env.AUTH_SECRET ?? "",
   SECRETS_ENCRYPTION_KEY: isHex64(process.env.SECRETS_ENCRYPTION_KEY)
     ? (process.env.SECRETS_ENCRYPTION_KEY as string)
-    : "0".repeat(64), // placeholder so crypto init doesn't throw at build
+    : "0".repeat(64),
   LZT_API_BASE: process.env.LZT_API_BASE ?? "https://prod-api.lolz.live",
   LZT_API_TOKEN: process.env.LZT_API_TOKEN ?? "",
   REDIS_URL: process.env.REDIS_URL ?? "",
@@ -68,6 +77,10 @@ const fallback: Env = {
   NOWPAYMENTS_API_KEY: process.env.NOWPAYMENTS_API_KEY ?? "",
   NOWPAYMENTS_IPN_SECRET: process.env.NOWPAYMENTS_IPN_SECRET ?? "",
   NOWPAYMENTS_PUBLIC_KEY: process.env.NOWPAYMENTS_PUBLIC_KEY ?? "",
+  REDOTPAY_APP_KEY: process.env.REDOTPAY_APP_KEY ?? "",
+  REDOTPAY_PRIVATE_KEY: process.env.REDOTPAY_PRIVATE_KEY ?? "",
+  REDOTPAY_KEY_VERSION: process.env.REDOTPAY_KEY_VERSION ?? "1",
+  REDOTPAY_ENV: process.env.REDOTPAY_ENV === "production" ? "production" : "sandbox",
 };
 
 export const env: Env = parsed.success ? parsed.data : fallback;
@@ -80,8 +93,14 @@ if (!parsed.success && process.env.NODE_ENV !== "production") {
 /** True when a real LZT token is configured — otherwise the catalog stays empty. */
 export const isSupplierConfigured = env.LZT_API_TOKEN.length > 0;
 
-/** True when NOWPayments keys are present — otherwise crypto top-up is disabled.
- *  IPN secret is required so we can verify callbacks; without it we refuse to
- *  credit wallets. */
+/** True when NOWPayments keys are present — otherwise that gateway is disabled. */
 export const isPaymentsConfigured =
   env.NOWPAYMENTS_API_KEY.length > 0 && env.NOWPAYMENTS_IPN_SECRET.length > 0;
+
+/** RedotPay Connect — app key required; private key required in production. */
+export const isRedotPayConfigured =
+  env.REDOTPAY_APP_KEY.length > 0 &&
+  (env.REDOTPAY_ENV !== "production" || env.REDOTPAY_PRIVATE_KEY.length > 0);
+
+/** Any crypto top-up provider available. */
+export const isAnyCryptoConfigured = isPaymentsConfigured || isRedotPayConfigured;

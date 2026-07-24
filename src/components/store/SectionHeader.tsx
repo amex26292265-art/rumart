@@ -15,13 +15,13 @@ export function SectionHeader({
   return (
     <Reveal className="mb-6 flex items-end justify-between gap-4">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-ink-950 sm:text-3xl">{title}</h2>
+        <h2 className="font-display text-2xl font-bold tracking-tight text-ink-950 sm:text-3xl">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-ink-500">{subtitle}</p>}
       </div>
       {href && (
         <Link
           href={href}
-          className="shrink-0 text-sm font-medium text-accent-600 transition-colors hover:text-accent-500"
+          className="shrink-0 text-sm font-semibold text-accent-400 transition-colors hover:text-accent-300"
         >
           {linkLabel} →
         </Link>

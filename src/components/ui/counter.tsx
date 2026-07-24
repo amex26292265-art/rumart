@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useInView, useReducedMotion } from "framer-motion";
 import { formatMoney } from "@/lib/utils";
 
 /**
  * Counts up to `value` when scrolled into view. Real numbers only.
- * Formatting is chosen via serializable props (`money`) so this client
- * component can be rendered directly from server components.
+ * Uses IntersectionObserver (no framer-motion dependency).
  */
 export function Counter({
   value,
-  duration = 1.3,
+  duration = 1.1,
   className,
   money = false,
   currency = "USD",
@@ -23,12 +21,31 @@ export function Counter({
   currency?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-40px" });
-  const reduced = useReducedMotion();
-  const [display, setDisplay] = useState(reduced ? value : 0);
+  const [display, setDisplay] = useState(0);
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
-    if (!inView || reduced) return;
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplay(value);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setStarted(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "-40px", threshold: 0.2 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [value]);
+
+  useEffect(() => {
+    if (!started) return;
     let raf = 0;
     const start = performance.now();
     const step = (now: number) => {
@@ -38,7 +55,7 @@ export function Counter({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [inView, value, duration, reduced]);
+  }, [started, value, duration]);
 
   return (
     <span ref={ref} className={className}>

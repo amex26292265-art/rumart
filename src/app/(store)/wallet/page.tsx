@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isPaymentsConfigured } from "@/lib/env";
+import { isPaymentsConfigured, isRedotPayConfigured, isAnyCryptoConfigured } from "@/lib/env";
 import { Container } from "@/components/ui/container";
 import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/ui/motion";
@@ -28,12 +28,17 @@ export default async function WalletPage({
     prisma.deposit.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 8 }),
   ]);
 
+  const providers = {
+    nowpayments: isPaymentsConfigured,
+    redotpay: isRedotPayConfigured,
+  };
+
   return (
     <Container className="max-w-3xl py-12">
-      <h1 className="text-3xl font-semibold tracking-tight text-ink-950">Wallet</h1>
+      <h1 className="font-display text-3xl font-bold tracking-tight text-ink-950">Wallet</h1>
 
       {sp.paid && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           <CheckCircle2 className="h-4 w-4" /> Payment received — your balance updates automatically once confirmed on-chain.
         </div>
       )}
@@ -43,30 +48,30 @@ export default async function WalletPage({
 
       <Reveal className="mt-6 grid gap-6 sm:grid-cols-[1fr_1.1fr]">
         {/* Balance card */}
-        <div className="card flex flex-col justify-center bg-ink-950 p-6 text-white">
-          <span className="text-sm text-ink-300">Store credit</span>
-          <span className="mt-1 text-4xl font-semibold">
+        <div className="card flex flex-col justify-center bg-gradient-to-br from-accent-700/40 to-mist-100 p-6">
+          <span className="text-sm text-ink-500">Store credit</span>
+          <span className="mt-1 font-display text-4xl font-bold text-ink-950">
             {formatMoney(user?.walletBalance ?? 0)}
           </span>
-          <p className="mt-2 text-xs text-ink-400">Use it to buy any account instantly.</p>
+          <p className="mt-2 text-xs text-ink-500">Use it to buy any listing instantly.</p>
         </div>
 
-        <TopUp enabled={isPaymentsConfigured} />
+        <TopUp enabled={isAnyCryptoConfigured} providers={providers} />
       </Reveal>
 
       {/* Deposit history */}
       <div className="card mt-8 overflow-hidden">
-        <div className="border-b border-mist-200 px-5 py-3 text-sm font-semibold text-ink-950">Top-up history</div>
+        <div className="border-b border-mist-300 px-5 py-3 text-sm font-semibold text-ink-950">Top-up history</div>
         {deposits.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-ink-400">No top-ups yet.</p>
+          <p className="px-5 py-10 text-center text-sm text-ink-500">No top-ups yet.</p>
         ) : (
           <table className="w-full text-sm">
             <tbody>
               {deposits.map((d) => (
-                <tr key={d.id} className="border-b border-mist-100">
-                  <td className="px-5 py-3 text-ink-600">{d.createdAt.toLocaleString()}</td>
+                <tr key={d.id} className="border-b border-mist-300">
+                  <td className="px-5 py-3 text-ink-500">{d.createdAt.toLocaleString()}</td>
                   <td className="px-5 py-3 font-medium text-ink-950">{formatMoney(d.amount, d.currency)}</td>
-                  <td className="px-5 py-3 text-ink-400">{d.provider}</td>
+                  <td className="px-5 py-3 text-ink-500">{d.provider}</td>
                   <td className="px-5 py-3 text-right">
                     <Badge
                       tone={

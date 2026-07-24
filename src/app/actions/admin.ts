@@ -23,16 +23,35 @@ const num = (fd: FormData, k: string) => {
 const bool = (fd: FormData, k: string) => fd.get(k) === "on" || fd.get(k) === "true";
 
 /** Run every enabled sync rule now (inline). Returns a summary for the UI. */
-export async function triggerSync(): Promise<{ imported: number; updated: number } | { error: string }> {
+export async function triggerSync(): Promise<
+  { imported: number; updated: number; removed?: number } | { error: string }
+> {
   await requireAdmin();
   try {
     const res = await runAllRules();
     invalidate("cat-");
     invalidate("trending-");
+    invalidate("newest-");
     revalidatePath("/admin", "layout");
-    return { imported: res.imported, updated: res.updated };
+    revalidatePath("/marketplace");
+    revalidatePath("/");
+    return { imported: res.imported, updated: res.updated, removed: res.removed };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Sync failed" };
+  }
+}
+
+export async function purgeNoCaptureProducts(): Promise<{ deleted: number } | { error: string }> {
+  await requireAdmin();
+  try {
+    const { purgeBadProducts } = await import("@/lib/sync/sync-service");
+    const res = await purgeBadProducts();
+    revalidatePath("/admin", "layout");
+    revalidatePath("/marketplace");
+    revalidatePath("/");
+    return { deleted: res.deleted };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Purge failed" };
   }
 }
 
@@ -127,6 +146,157 @@ export async function updateProduct(fd: FormData) {
   await prisma.product.update({ where: { id }, data });
   revalidatePath("/admin/products");
   revalidatePath("/", "layout");
+}
+
+/** Create a manual (non-LZT) product with optional encrypted credential stock. */
+export async function createManualProduct(
+  fd: FormData,
+): Promise<{ ok: true; slug: string } | { ok: false; error: string }> {
+  await requireAdmin();
+  const title = str(fd, "title");
+  const categoryId = str(fd, "categoryId");
+  const price = num(fd, "price");
+  const description = str(fd, "description") || null;
+  const imagesRaw = str(fd, "images");
+  const credentialJson = str(fd, "credentialJson");
+  const deliveryType = str(fd, "deliveryType") === "auto" ? "auto" : "manual";
+
+  if (title.length < 8) return { ok: false, error: "Title must be at least 8 characters." };
+  if (!categoryId) return { ok: false, error: "Category is required." };
+  if (price == null || price <= 0) return { ok: false, error: "Enter a positive price." };
+
+  const manual = await prisma.supplier.upsert({
+    where: { slug: "manual" },
+    update: {},
+    create: { slug: "manual", name: "Manual / Custom" },
+  });
+
+  const slugBase = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  const slug = `${slugBase || "product"}-${Date.now().toString(36)}`;
+
+  let credentialStock: string | null = null;
+  let stock = 1;
+  if (credentialJson) {
+    try {
+      const parsed = JSON.parse(credentialJson);
+      const arr = Array.isArray(parsed) ? parsed : [parsed];
+      credentialStock = encryptSecret(JSON.stringify(arr));
+      stock = arr.length;
+    } catch {
+      return { ok: false, error: "Credential JSON is invalid." };
+    }
+  }
+
+  const images = imagesRaw
+    ? imagesRaw
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  const product = await prisma.product.create({
+    data: {
+      slug,
+      title,
+      description,
+      price,
+      cost: price * 0.5,
+      currency: "USD",
+      status: "active",
+      deliveryType,
+      stock,
+      sourceType: "manual",
+      credentialStock,
+      images: images.length ? images : undefined,
+      supplierId: manual.id,
+      categoryId,
+      supplierItemId: `manual-${slug}`,
+    },
+  });
+
+  revalidatePath("/admin/products");
+  revalidatePath("/marketplace");
+  return { ok: true, slug: product.slug };
+}
+
+export async function reviewSellerApplication(
+  fd: FormData,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const decision = str(fd, "decision"); // approve | reject
+  const app = await prisma.sellerApplication.findUnique({ where: { id } });
+  if (!app) return { ok: false, error: "Application not found." };
+  if (app.status !== "pending") return { ok: false, error: "Already reviewed." };
+
+  if (decision === "reject") {
+    await prisma.sellerApplication.update({
+      where: { id },
+      data: { status: "rejected", adminNote: str(fd, "adminNote") || null },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: app.userId,
+        title: "Seller application declined",
+        body: "Your seller application was not approved. Contact support if you have questions.",
+      },
+    });
+    revalidatePath("/admin/sellers");
+    return { ok: true };
+  }
+
+  const base =
+    app.displayName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || "seller";
+  let slug = base;
+  let n = 0;
+  while (await prisma.sellerProfile.findUnique({ where: { slug } })) {
+    n++;
+    slug = `${base}-${n}`;
+  }
+
+  await prisma.$transaction([
+    prisma.sellerApplication.update({ where: { id }, data: { status: "approved" } }),
+    prisma.sellerProfile.create({
+      data: {
+        userId: app.userId,
+        slug,
+        displayName: app.displayName,
+        bio: app.bio,
+        badge: "verified",
+        verified: true,
+        status: "active",
+      },
+    }),
+    prisma.user.update({ where: { id: app.userId }, data: { role: "seller" } }),
+    prisma.notification.create({
+      data: {
+        userId: app.userId,
+        title: "Seller application approved",
+        body: "Welcome aboard — open your seller dashboard to list products.",
+      },
+    }),
+  ]);
+
+  revalidatePath("/admin/sellers");
+  revalidatePath("/seller");
+  return { ok: true };
+}
+
+export async function moderateReview(fd: FormData) {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const status = str(fd, "status");
+  if (!["published", "hidden", "pending"].includes(status)) return;
+  await prisma.review.update({ where: { id }, data: { status } });
+  revalidatePath("/admin/reviews");
 }
 
 /**
@@ -323,4 +493,105 @@ export async function generateAllRules(): Promise<{ created: number; updated: nu
   }
   revalidatePath("/admin/sync");
   return { created, updated };
+}
+
+// ─── Admin team ────────────────────────────────────────────────────────────
+export async function createAdminUser(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const email = str(fd, "email").toLowerCase();
+  const password = str(fd, "password");
+  const name = str(fd, "name") || null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "Enter a valid email." };
+  if (password.length < 10) return { ok: false, error: "Password must be at least 10 characters." };
+
+  const { hashPassword } = await import("@/lib/password");
+  const passwordHash = await hashPassword(password);
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { role: "admin", passwordHash, name: name ?? existing.name },
+    });
+  } else {
+    await prisma.user.create({
+      data: { email, passwordHash, name, role: "admin" },
+    });
+  }
+  revalidatePath("/admin/team");
+  return { ok: true };
+}
+
+export async function setUserRole(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const role = str(fd, "role");
+  if (!["customer", "admin", "seller"].includes(role)) return { ok: false, error: "Invalid role." };
+  const session = await auth();
+  const selfId = (session?.user as { id?: string } | undefined)?.id;
+  if (selfId && selfId === id && role !== "admin") {
+    return { ok: false, error: "You can’t demote yourself." };
+  }
+  await prisma.user.update({ where: { id }, data: { role } });
+  revalidatePath("/admin/team");
+  return { ok: true };
+}
+
+// ─── Category banners / logos ──────────────────────────────────────────────
+export async function saveCategoryBranding(fd: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const id = str(fd, "id");
+  const logoUrl = str(fd, "logoUrl") || null;
+  const bannerUrl = str(fd, "bannerUrl") || null;
+  const accent = str(fd, "accent") || "#7c3aed";
+  const featured = bool(fd, "featured");
+  await prisma.category.update({
+    where: { id },
+    data: { logoUrl, bannerUrl, accent, featured },
+  });
+  invalidate("cat-");
+  revalidatePath("/admin/categories");
+  revalidatePath("/");
+  revalidatePath("/categories");
+  return { ok: true };
+}
+
+/** Apply default /brands/{slug}.svg logos for known categories. */
+export async function seedCategoryLogos(): Promise<{ updated: number }> {
+  await requireAdmin();
+  const cats = await prisma.category.findMany();
+  let updated = 0;
+  for (const c of cats) {
+    const logoUrl = `/brands/${c.slug === "riot" ? "valorant" : c.slug === "socialclub" ? "gta" : c.slug}.svg`;
+    // Only set when file is one we ship, or leave custom
+    const known = [
+      "fortnite",
+      "valorant",
+      "steam",
+      "discord",
+      "telegram",
+      "roblox",
+      "minecraft",
+      "ea",
+      "instagram",
+      "tiktok",
+      "chatgpt",
+      "claude",
+      "cursor",
+      "epicgames",
+      "gta",
+      "genshin",
+      "ai",
+    ];
+    const slug = c.slug === "riot" ? "valorant" : c.slug === "socialclub" ? "gta" : c.slug;
+    if (!known.includes(slug)) continue;
+    await prisma.category.update({
+      where: { id: c.id },
+      data: { logoUrl: c.logoUrl || logoUrl },
+    });
+    updated++;
+  }
+  invalidate("cat-");
+  revalidatePath("/admin/categories");
+  revalidatePath("/");
+  return { updated };
 }

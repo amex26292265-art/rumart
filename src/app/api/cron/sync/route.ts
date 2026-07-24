@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { runAllRules } from "@/lib/sync/sync-service";
+import { prisma } from "@/lib/prisma";
 
 /**
- * Periodic sync endpoint. Protected by CRON_SECRET so only your scheduler can
- * trigger it. Wire it up in vercel.json:
- *   { "crons": [{ "path": "/api/cron/sync", "schedule": "0 * * * *" }] }
- * Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.
+ * Periodic sync endpoint (every 30 minutes via Cloudflare Cron / external ping).
+ * Protected by CRON_SECRET. Send `Authorization: Bearer <CRON_SECRET>`.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -17,6 +16,11 @@ export async function GET(request: Request) {
   }
   try {
     const result = await runAllRules();
+    await prisma.setting.upsert({
+      where: { key: "cron_last_sync" },
+      update: { value: new Date().toISOString() },
+      create: { key: "cron_last_sync", value: new Date().toISOString() },
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(

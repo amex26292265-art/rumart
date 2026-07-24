@@ -4,15 +4,13 @@ import { getSupplier } from "@/lib/suppliers/registry";
 import { applyPricing, resolveCategoryPricing } from "@/lib/pricing/engine";
 import { slugify } from "@/lib/utils";
 import { LZT_CATEGORIES, isValidLztCategory } from "@/lib/suppliers/lzt/adapter";
+import { hasFullCapture, isJunkTitle, type TitleAttrs } from "@/lib/suppliers/lzt/titles";
 import type { SupplierListing } from "@/lib/suppliers/types";
+import { invalidate } from "@/lib/cache";
 
 /**
  * Synchronization service. Runs configured sync rules against a supplier:
- *   import new listings → update prices/stock → remove unavailable ones.
- *
- * Runs inline today (callable from an admin API route). The structure — one
- * pure `runRule` per rule plus a `runAll` — maps directly onto a BullMQ worker
- * later: enqueue one job per rule, no code changes to the logic below.
+ *   import new listings → update prices/stock → remove unavailable / no-capture ones.
  */
 
 interface RuleFilter {
@@ -34,18 +32,78 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-export async function runRule(ruleId: string): Promise<{ imported: number; updated: number }> {
+function attrsFromJson(value: unknown): TitleAttrs {
+  if (!value || typeof value !== "object") return {};
+  const at = value as Record<string, unknown>;
+  return {
+    level: typeof at.level === "number" ? at.level : null,
+    emailNative: at.emailNative === true,
+    vac: at.vac === true,
+    personal: at.personal === true,
+    sda: at.sda === true,
+    warranty: typeof at.warranty === "string" ? at.warranty : null,
+    country: typeof at.country === "string" ? at.country : null,
+    games: Array.isArray(at.games) ? at.games.filter((g): g is string => typeof g === "string") : [],
+    tags: Array.isArray(at.tags) ? at.tags.filter((g): g is string => typeof g === "string") : [],
+    stats: Array.isArray(at.stats)
+      ? (at.stats as { label?: unknown; value?: unknown }[])
+          .filter((s) => typeof s?.label === "string" && typeof s?.value === "string")
+          .map((s) => ({ label: s.label as string, value: s.value as string }))
+      : [],
+    origin: typeof at.origin === "string" ? at.origin : null,
+  };
+}
+
+/** Hard-delete junk / empty-capture products. Safe to run anytime. */
+export async function purgeBadProducts(): Promise<{ deleted: number; ids: string[] }> {
+  const active = await prisma.product.findMany({
+    where: { status: { in: ["active", "hidden", "unavailable"] }, sourceType: { in: ["lzt", "manual"] } },
+    select: {
+      id: true,
+      title: true,
+      attributes: true,
+      category: { select: { slug: true } },
+      orderItems: { select: { id: true }, take: 1 },
+    },
+  });
+
+  const ids: string[] = [];
+  for (const p of active) {
+    const junk = isJunkTitle(p.title);
+    const capture = hasFullCapture(p.category.slug, attrsFromJson(p.attributes), p.title);
+    if (junk || !capture) {
+      // Never hard-delete products that already have orders — hide instead.
+      if (p.orderItems.length > 0) {
+        await prisma.product.update({ where: { id: p.id }, data: { status: "unavailable" } });
+      } else {
+        ids.push(p.id);
+      }
+    }
+  }
+
+  if (ids.length) {
+    await prisma.product.deleteMany({ where: { id: { in: ids } } });
+  }
+
+  invalidate("trending-");
+  invalidate("newest-");
+  invalidate("ai-products-");
+  invalidate("cat-");
+  return { deleted: ids.length, ids };
+}
+
+export async function runRule(
+  ruleId: string,
+): Promise<{ imported: number; updated: number; removed: number }> {
   const rule = await prisma.syncRule.findUnique({
     where: { id: ruleId },
     include: { category: true },
   });
-  if (!rule || !rule.enabled) return { imported: 0, updated: 0 };
+  if (!rule || !rule.enabled) return { imported: 0, updated: 0, removed: 0 };
 
   const supplier = getSupplier("lzt");
-  if (!supplier || !supplier.isConfigured()) return { imported: 0, updated: 0 };
+  if (!supplier || !supplier.isConfigured()) return { imported: 0, updated: 0, removed: 0 };
 
-  // Fail fast with a clear message on an invalid supplier category instead of a
-  // cryptic upstream 404.
   if (!isValidLztCategory(rule.supplierCategory)) {
     throw new Error(
       `Invalid supplier category "${rule.supplierCategory}" for rule "${rule.name}". ` +
@@ -60,7 +118,6 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
     maxImport: rule.maxImport,
   };
 
-  // Page through the supplier until we have enough (LZT returns ~40 per page).
   const collected: SupplierListing[] = [];
   const seen = new Set<string>();
   for (let page = 1; page <= 25 && collected.length < filter.maxImport; page++) {
@@ -73,7 +130,7 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
       autoDeliveryOnly: rule.autoDeliveryOnly,
       page,
     });
-    if (batch.length === 0) break; // no more pages
+    if (batch.length === 0) break;
     for (const item of batch) {
       if (!seen.has(item.supplierItemId) && passesTextFilters(item, filter)) {
         seen.add(item.supplierItemId);
@@ -95,7 +152,6 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
   const asJson = (v: Record<string, unknown> | undefined): Prisma.InputJsonValue | undefined =>
     v === undefined ? undefined : (v as Prisma.InputJsonValue);
 
-  // Pull the indexable fields out of the parsed attributes.
   const a = (listing: (typeof listings)[number]) => {
     const at = (listing.attributes ?? {}) as Record<string, unknown>;
     return {
@@ -107,10 +163,11 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
     };
   };
 
-  // Resolve pricing ONCE per rule run (not per item) for speed.
   const pricing = await resolveCategoryPricing(rule.categoryId);
+  const keepSupplierIds = new Set<string>();
 
   for (const listing of listings) {
+    keepSupplierIds.add(listing.supplierItemId);
     const price = applyPricing(listing.cost, pricing);
     const baseSlug = slugify(`${listing.title}-${listing.supplierItemId}`);
     const idx = a(listing);
@@ -134,6 +191,7 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
           cost: listing.cost,
           status: "active",
           attributes: asJson(listing.attributes ?? undefined),
+          images: listing.images ? (listing.images as Prisma.InputJsonValue) : undefined,
           country: idx.country,
           emailNative: idx.emailNative,
           vac: idx.vac,
@@ -155,6 +213,7 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
           status: "active",
           stock: 1,
           attributes: asJson(listing.attributes ?? undefined),
+          images: listing.images ? (listing.images as Prisma.InputJsonValue) : undefined,
           country: idx.country,
           emailNative: idx.emailNative,
           vac: idx.vac,
@@ -169,11 +228,54 @@ export async function runRule(ruleId: string): Promise<{ imported: number; updat
     }
   }
 
-  return { imported, updated };
+  // Remove stale LZT products in this category that weren't in the fresh capture set.
+  const stale = await prisma.product.findMany({
+    where: {
+      categoryId: rule.categoryId,
+      supplierId: supplierRow.id,
+      status: "active",
+      sourceType: "lzt",
+    },
+    select: {
+      id: true,
+      title: true,
+      supplierItemId: true,
+      attributes: true,
+      orderItems: { select: { id: true }, take: 1 },
+    },
+  });
+
+  let removed = 0;
+  const deleteIds: string[] = [];
+  for (const p of stale) {
+    const stillGood =
+      p.supplierItemId &&
+      keepSupplierIds.has(p.supplierItemId) &&
+      !isJunkTitle(p.title) &&
+      hasFullCapture(rule.category.slug, attrsFromJson(p.attributes), p.title);
+    if (stillGood) continue;
+    if (p.orderItems.length > 0) {
+      await prisma.product.update({ where: { id: p.id }, data: { status: "unavailable" } });
+      removed++;
+    } else {
+      deleteIds.push(p.id);
+    }
+  }
+  if (deleteIds.length) {
+    await prisma.product.deleteMany({ where: { id: { in: deleteIds } } });
+    removed += deleteIds.length;
+  }
+
+  return { imported, updated, removed };
 }
 
 /** Run every enabled rule and record a SyncRun for the admin log. */
-export async function runAllRules(): Promise<{ imported: number; updated: number; runId: string }> {
+export async function runAllRules(): Promise<{
+  imported: number;
+  updated: number;
+  removed: number;
+  runId: string;
+}> {
   const supplierRow = await prisma.supplier.upsert({
     where: { slug: "lzt" },
     update: {},
@@ -185,19 +287,28 @@ export async function runAllRules(): Promise<{ imported: number; updated: number
   });
 
   try {
+    // Global purge of valorant test / empty-capture junk first.
+    const purged = await purgeBadProducts();
+
     const rules = await prisma.syncRule.findMany({ where: { enabled: true } });
     let imported = 0;
     let updated = 0;
+    let removed = purged.deleted;
     for (const rule of rules) {
       const result = await runRule(rule.id);
       imported += result.imported;
       updated += result.updated;
+      removed += result.removed;
     }
     await prisma.syncRun.update({
       where: { id: run.id },
-      data: { status: "success", imported, updated, finishedAt: new Date() },
+      data: { status: "success", imported, updated, removed, finishedAt: new Date() },
     });
-    return { imported, updated, runId: run.id };
+    invalidate("trending-");
+    invalidate("newest-");
+    invalidate("ai-products-");
+    invalidate("cat-");
+    return { imported, updated, removed, runId: run.id };
   } catch (err) {
     await prisma.syncRun.update({
       where: { id: run.id },

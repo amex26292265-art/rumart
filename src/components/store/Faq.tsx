@@ -12,23 +12,27 @@ export interface FaqEntry {
 export const FAQ_ENTRIES: FaqEntry[] = [
   {
     q: "How fast is delivery?",
-    a: "Instantly for auto-delivery listings. Once your payment is confirmed, Rumart purchases the item, encrypts the credentials, and shows them in your order — usually within seconds.",
+    a: "Instantly for auto-delivery listings. Once your wallet payment clears, Rumart purchases the item, encrypts the credentials, and unlocks them in your order — usually within seconds.",
   },
   {
     q: "Are the accounts genuine?",
-    a: "Every listing is sourced live from our supplier network and only shown while it is actually available. Nothing on Rumart is fabricated or a placeholder.",
+    a: "Every listing is sourced live and only shown while it is actually available. Rumart never fabricates stock, reviews, or stats.",
   },
   {
     q: "What payment methods can I use?",
-    a: "Store credit today. Card payments (Stripe) and cryptocurrency are being added and will settle automatically — you never wait on manual confirmation.",
+    a: "Top up your wallet with cryptocurrency via NOWPayments (USDT, BTC, ETH, LTC and more). Purchases debit your Rumart balance instantly.",
   },
   {
     q: "How are my credentials protected?",
-    a: "Delivered credentials are encrypted at rest with AES-256-GCM and only decrypted for you inside your order. We never expose supplier data or API keys.",
+    a: "Delivered credentials are encrypted at rest with AES-256-GCM and only decrypted for you inside your order. Supplier data and API keys are never exposed.",
   },
   {
     q: "What if something is wrong with my order?",
-    a: "Open your order and contact support with the reference. Because delivery is automated and logged end-to-end, issues are quick to trace and resolve.",
+    a: "Open your order and contact support on Telegram with the reference. Automated delivery is logged end-to-end so issues are quick to resolve.",
+  },
+  {
+    q: "Can I sell on Rumart?",
+    a: "Yes. Apply to become a verified seller from the Sell page. After admin approval you get a seller dashboard for listings, stats, and earnings.",
   },
 ];
 
@@ -49,7 +53,7 @@ export function Faq({ entries = FAQ_ENTRIES }: { entries?: FaqEntry[] }) {
                 animate={{ rotate: isOpen ? 45 : 0 }}
                 transition={{ duration: 0.2 }}
                 className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
-                  isOpen ? "bg-ink-950 text-white" : "bg-mist-100 text-ink-500"
+                  isOpen ? "bg-accent-500 text-white" : "bg-mist-200 text-ink-500"
                 }`}
               >
                 <Plus className="h-4 w-4" />
