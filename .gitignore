@@ -10,6 +10,13 @@
 !.yarn/releases
 !.yarn/versions
 
+# memecoin-intelligence local artifacts
+memecoin-intelligence/**/node_modules/
+memecoin-intelligence/**/.venv/
+memecoin-intelligence/**/.next/
+memecoin-intelligence/.env
+memecoin-intelligence/backend/.pytest_cache/
+
 # testing
 /coverage
 

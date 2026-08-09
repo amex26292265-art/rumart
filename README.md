@@ -10,6 +10,13 @@ Prisma · SQLite (local) / Postgres (prod) · Auth.js v5 · Zod · pnpm.
 
 ---
 
+## Related: Memecoin Intelligence
+
+An independent local Solana memecoin decision-support app (paper trading only) lives in
+[`memecoin-intelligence/`](./memecoin-intelligence/). See its README and `docs/` for Phase 1.
+
+---
+
 ## Quick start
 
 ```bash
