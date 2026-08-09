@@ -16,6 +16,7 @@ import json
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,6 +30,7 @@ log = get_logger("bybit")
 BYBIT_REST = "https://api.bybit.com"
 BYBIT_WS_SPOT = "wss://stream.bybit.com/v5/public/spot"
 COINGECKO_BYBIT_SPOT = "https://api.coingecko.com/api/v3/exchanges/bybit_spot/tickers"
+INSTRUMENT_CACHE = Path("/tmp/memecoin_bybit_instruments.json")
 
 WINDOWS_SEC = [10, 30, 60, 180, 300, 900, 3600, 14400, 86400]
 WINDOW_LABELS = {
@@ -121,6 +123,7 @@ class BybitSpotService:
             self.discovery_source = "bybit.v5.market.instruments-info"
             self.discovery_error = None
             self._ingest_instruments(instruments)
+            self._write_cache(instruments)
             return instruments
         except Exception as exc:
             self.rest_ok = False
@@ -131,10 +134,55 @@ class BybitSpotService:
             instruments = await self._discover_coingecko_fallback()
             self.discovery_source = "coingecko.exchanges.bybit_spot.tickers"
             self._ingest_instruments(instruments)
+            self._write_cache(instruments)
             return instruments
         except Exception as exc:
             self.discovery_error = f"bybit_rest={self.discovery_error}; coingecko={exc}"
             log.warning("coingecko_discovery_failed", error=str(exc))
+
+        cached = self._read_cache()
+        if cached:
+            self.discovery_source = "local.instrument_cache"
+            self._ingest_instruments(cached)
+            return cached
+        return []
+
+    def _write_cache(self, instruments: list[Instrument]) -> None:
+        try:
+            payload = [
+                {
+                    "symbol": i.symbol,
+                    "base": i.base,
+                    "quote": i.quote,
+                    "status": i.status,
+                    "launch_time_ms": i.launch_time_ms,
+                    "discovery_source": i.discovery_source,
+                }
+                for i in instruments
+            ]
+            INSTRUMENT_CACHE.write_text(json.dumps({"items": payload}))
+        except Exception as exc:
+            log.warning("instrument_cache_write_failed", error=str(exc))
+
+    def _read_cache(self) -> list[Instrument]:
+        try:
+            if not INSTRUMENT_CACHE.exists():
+                return []
+            raw = json.loads(INSTRUMENT_CACHE.read_text())
+            out = []
+            for row in raw.get("items") or []:
+                out.append(
+                    Instrument(
+                        symbol=row["symbol"],
+                        base=row["base"],
+                        quote=row.get("quote") or "USDT",
+                        status=row.get("status") or "Trading",
+                        launch_time_ms=row.get("launch_time_ms"),
+                        discovery_source="local.instrument_cache",
+                    )
+                )
+            return out
+        except Exception:
             return []
 
     async def _discover_bybit_rest(self) -> list[Instrument]:
