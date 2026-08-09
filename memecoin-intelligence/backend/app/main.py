@@ -48,14 +48,27 @@ async def lifespan(_app: FastAPI):
         raise RuntimeError("LIVE_EXECUTION_ENABLED must remain false — no live execution module in Phase 1")
     state.load_scenarios()
     await _probe_infra()
+    if settings.bybit_enabled:
+        try:
+            await state.bybit.start(max_ws_symbols=settings.bybit_ws_max_symbols)
+            log.info(
+                "bybit_started",
+                instruments=len(state.bybit.instruments),
+                discovery=state.bybit.discovery_source,
+                rest_ok=state.bybit.rest_ok,
+            )
+        except Exception as exc:
+            log.warning("bybit_start_failed", error=str(exc))
     log.info(
         "startup",
         tokens=len(state.tokens),
+        scenarios_enabled=settings.seed_demo_scenarios,
         db_ok=state.db_ok,
         redis_ok=state.redis_ok,
         trading_mode=settings.trading_mode,
     )
     yield
+    await state.bybit.stop()
 
 
 def create_app() -> FastAPI:

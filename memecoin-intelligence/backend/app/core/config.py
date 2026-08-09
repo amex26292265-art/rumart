@@ -23,10 +23,14 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     trading_mode: Literal["paper"] = "paper"
-    paper_starting_balance_usd: float = 40.0
-    paper_max_position_usd: float = 5.0
-    paper_max_open_positions: int = 5
+    paper_starting_balance_usd: float = 500.0
+    paper_max_position_usd: float = 50.0
+    paper_max_open_positions: int = 10
     live_execution_enabled: bool = False
+    bybit_enabled: bool = True
+    bybit_ws_max_symbols: int = 80
+    bybit_rest_base: str = "https://api.bybit.com"
+    bybit_ws_spot: str = "wss://stream.bybit.com/v5/public/spot"
 
     stale_price_seconds: int = 30
     stale_holders_seconds: int = 120
@@ -57,8 +61,8 @@ class Settings(BaseSettings):
     axiom_mint_deep_link_template: str = ""
 
     seed_demo_scenarios: bool = Field(
-        default=True,
-        description="Load labeled mock scenarios for UI/tests. Never presented as live chain data.",
+        default=False,
+        description="Dev/tests only. Must stay false in production dashboard.",
     )
 
     @property

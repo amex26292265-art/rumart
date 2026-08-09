@@ -1,225 +1,154 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { TokenTable } from "@/components/TokenTable";
-import { useLiveSocket } from "@/hooks/useLiveSocket";
-import {
-  API_BASE,
-  Health,
-  PaperPortfolio,
-  TokenRow,
-  apiGet,
-  fmt,
-} from "@/lib/api";
+import Link from "next/link";
+import { OpportunityRow, KpiCard } from "@/components/ui/OpportunityRow";
+import { BybitFeature, apiGet, fmt, fmtPct } from "@/lib/api";
 
-type Narrative = {
-  id: string;
-  title: string;
-  narrative_score: number;
-  summary: string;
-  link_class: string;
-  source: string;
+type Kpis = {
+  portfolio?: number | null;
+  today_pnl?: number | null;
+  open_positions?: number | null;
+  ai_signals_today?: number | null;
+  win_rate?: number | null;
+  profit_factor?: number | null;
+  max_drawdown?: number | null;
+  best_signal_today?: { symbol?: string; opportunity_score?: number; status?: string } | null;
+  starting_balance?: number;
+  note?: string;
 };
 
 export default function DashboardPage() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [opps, setOpps] = useState<TokenRow[]>([]);
-  const [news, setNews] = useState<TokenRow[]>([]);
-  const [rejected, setRejected] = useState<TokenRow[]>([]);
-  const [smart, setSmart] = useState<Array<Record<string, string>>>([]);
-  const [narratives, setNarratives] = useState<Narrative[]>([]);
-  const [paper, setPaper] = useState<PaperPortfolio | null>(null);
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+  const [opps, setOpps] = useState<BybitFeature[]>([]);
+  const [movers, setMovers] = useState<BybitFeature[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<string>("");
 
   const refresh = useCallback(async () => {
     try {
-      const [h, o, n, r, s, nar, p] = await Promise.all([
-        apiGet<Health>("/health"),
-        apiGet<{ items: TokenRow[] }>("/tokens/opportunities"),
-        apiGet<{ items: TokenRow[] }>("/tokens/new"),
-        apiGet<{ items: TokenRow[] }>("/tokens/rejected"),
-        apiGet<{ items: Array<Record<string, string>> }>("/smart-money"),
-        apiGet<{ items: Narrative[] }>("/narratives/breaking"),
-        apiGet<PaperPortfolio>("/portfolio/paper"),
+      const [k, o, m] = await Promise.all([
+        apiGet<Kpis>("/dashboard/kpis"),
+        apiGet<{ items: BybitFeature[]; source?: string }>("/tokens/opportunities"),
+        apiGet<{ items: BybitFeature[] }>("/bybit/fast-movers?limit=12"),
       ]);
-      setHealth(h);
-      setOpps(o.items);
-      setNews(n.items);
-      setRejected(r.items);
-      setSmart(s.items);
-      setNarratives(nar.items);
-      setPaper(p);
+      setKpis(k);
+      setOpps(o.items || []);
+      setSource(o.source || "");
+      setMovers(m.items || []);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load API");
+      setError(e instanceof Error ? e.message : "API unreachable");
     }
   }, []);
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 8000);
+    const id = setInterval(refresh, 4000);
     return () => clearInterval(id);
   }, [refresh]);
 
-  const { connected } = useLiveSocket(() => {
-    // refresh on meaningful events
-    void refresh();
-  });
-
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div>
-          <div className="brand">Memecoin Intelligence</div>
-          <p className="sub">
-            Local decision-support for fresh Solana memecoins. Paper trading only. Evidence required —
-            missing data shows as INSUFFICIENT, never invented.
-          </p>
-        </div>
-        <div className="badge-row">
-          <span className="pill ok">PAPER MODE</span>
-          <span className={`pill ${connected ? "ok" : "warn"}`}>
-            WS {connected ? "LIVE" : "RECONNECTING"}
-          </span>
-          <span className={`pill ${health?.status === "ok" ? "ok" : "warn"}`}>
-            API {health?.status?.toUpperCase() || "…"}
-          </span>
-          {health?.analysis_quality_warning && (
-            <span className="pill warn">ANALYSIS DEGRADED</span>
-          )}
-        </div>
-      </header>
-
+    <div className="space-y-4">
       {error && (
-        <section className="section" style={{ borderColor: "rgba(226,92,92,0.5)" }}>
-          <h2>API unreachable</h2>
-          <p className="muted">
-            {error}. Expected backend at <span className="mono">{API_BASE}</span>
-          </p>
-        </section>
+        <div className="card border-rose-500/40 p-3 text-sm text-rose-200">
+          API unreachable: {error}. Start backend on :8000.
+        </div>
       )}
 
-      <div className="grid">
-        <section className="section">
-          <h2>Breaking Narratives</h2>
-          {narratives.length === 0 ? (
-            <p className="muted">No narratives yet.</p>
+      <section className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+        <KpiCard label="Portfolio" value={`$${fmt(kpis?.portfolio ?? kpis?.starting_balance ?? null)}`} sub="Paper capital" />
+        <KpiCard label="Today PnL" value={`$${fmt(kpis?.today_pnl)}`} />
+        <KpiCard label="Open Positions" value={fmt(kpis?.open_positions, 0)} />
+        <KpiCard label="AI Signals Today" value={fmt(kpis?.ai_signals_today, 0)} />
+        <KpiCard
+          label="Win Rate"
+          value={kpis?.win_rate == null ? "—" : `${fmt((kpis.win_rate || 0) * 100, 0)}%`}
+        />
+        <KpiCard label="Profit Factor" value={fmt(kpis?.profit_factor)} />
+        <KpiCard label="Max Drawdown" value={kpis?.max_drawdown == null ? "—" : fmtPct(kpis.max_drawdown)} sub={kpis?.note} />
+        <KpiCard
+          label="Best Signal Today"
+          value={kpis?.best_signal_today?.symbol || "—"}
+          sub={
+            kpis?.best_signal_today
+              ? `Opp ${fmt(kpis.best_signal_today.opportunity_score, 0)} · ${kpis.best_signal_today.status}`
+              : "No signal yet"
+          }
+        />
+      </section>
+
+      <section className="card p-4">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">🔥 AI Opportunities Now</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              What should I look at now? Ranked by opportunity with separate entry quality. Source: {source || "—"}
+            </p>
+          </div>
+          <Link href="/bybit" className="text-xs text-violet-300 hover:underline">
+            Open Bybit Scanner →
+          </Link>
+        </div>
+        <div className="space-y-2">
+          {opps.length === 0 ? (
+            <EmptyLive note="Waiting for live Bybit WebSocket samples. No mock tokens shown in production." />
           ) : (
-            narratives.map((n) => (
-              <div key={n.id} style={{ marginBottom: "0.8rem" }}>
-                <strong>{n.title}</strong>
-                <div className="muted">
-                  Score {n.narrative_score} · {n.link_class} · source {n.source}
-                </div>
-                <div>{n.summary}</div>
-              </div>
-            ))
+            opps.slice(0, 8).map((item, idx) => <OpportunityRow key={item.symbol} item={item} rank={idx + 1} />)
           )}
-        </section>
+        </div>
+      </section>
 
-        <section className="section">
-          <h2>Top Opportunities Now</h2>
-          <TokenTable rows={opps} showRank />
-        </section>
-
-        <section className="section">
-          <h2>New Tokens</h2>
-          <TokenTable rows={news} />
-        </section>
-
-        <section className="section">
-          <h2>Smart Money Activity</h2>
-          {smart.length === 0 ? (
-            <p className="muted">No smart-money labels available.</p>
-          ) : (
-            <ul>
-              {smart.map((s) => (
-                <li key={s.mint}>
-                  <strong>{s.symbol}</strong> — {s.label}
-                  <div className="muted">{s.note}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="section">
-          <h2>Danger / Rejected</h2>
-          <TokenTable rows={rejected} />
-        </section>
-
-        <section className="section">
-          <h2>Paper Portfolio</h2>
-          {paper ? (
-            <>
-              <div className="metrics">
-                <div className="metric">
-                  <div className="k">Balance</div>
-                  <div className="v">${fmt(paper.metrics.balance)}</div>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="card p-4">
+          <h2 className="mb-2 text-base font-semibold">⚡ Bybit Fast Movers</h2>
+          <p className="mb-3 text-xs text-slate-400">Acceleration now — not 24h gainer leaderboard.</p>
+          <div className="space-y-2">
+            {movers.length === 0 ? (
+              <EmptyLive note="Collecting short-horizon samples…" />
+            ) : (
+              movers.slice(0, 6).map((m, i) => <OpportunityRow key={m.symbol} item={m} rank={i + 1} />)
+            )}
+          </div>
+        </div>
+        <div className="card p-4">
+          <h2 className="mb-2 text-base font-semibold">Market Regime</h2>
+          <p className="text-sm text-slate-400">
+            Regime model uses BTC/ETH/SOL breadth when samples exist. Until calibrated:{" "}
+            <span className="text-slate-200">UNKNOWN</span> (not fabricated).
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {["BTCUSDT", "ETHUSDT", "SOLUSDT"].map((sym) => {
+              const row = movers.find((m) => m.symbol === sym) || opps.find((m) => m.symbol === sym);
+              return (
+                <div key={sym} className="rounded-xl border border-[var(--border)] bg-black/20 p-3">
+                  <div className="text-xs text-slate-500">{sym}</div>
+                  <div className="mt-1 font-mono text-sm">${fmt(row?.price, 2)}</div>
+                  <div className="text-xs text-slate-400">1m {fmtPct(row?.changes?.["1m"])}</div>
                 </div>
-                <div className="metric">
-                  <div className="k">Equity</div>
-                  <div className="v">${fmt(paper.metrics.equity)}</div>
-                </div>
-                <div className="metric">
-                  <div className="k">Realized</div>
-                  <div className="v">${fmt(paper.metrics.realized_pnl)}</div>
-                </div>
-                <div className="metric">
-                  <div className="k">Fees</div>
-                  <div className="v">${fmt(paper.metrics.fees_paid)}</div>
-                </div>
-                <div className="metric">
-                  <div className="k">Open</div>
-                  <div className="v">{paper.metrics.open_positions ?? 0}</div>
-                </div>
-                <div className="metric">
-                  <div className="k">Win rate</div>
-                  <div className="v">
-                    {paper.metrics.win_rate == null ? "—" : `${fmt((paper.metrics.win_rate || 0) * 100, 0)}%`}
-                  </div>
-                </div>
-              </div>
-              <p className="muted">
-                Starting $40 challenge simulation. Max position ${fmt(5, 0)}. No live execution.
-              </p>
-            </>
-          ) : (
-            <p className="muted">Portfolio unavailable.</p>
-          )}
-        </section>
-
-        <section className="section">
-          <h2>Health</h2>
-          <div className="metrics">
-            <div className="metric">
-              <div className="k">Database</div>
-              <div className="v">{health?.database || "—"}</div>
-            </div>
-            <div className="metric">
-              <div className="k">Redis</div>
-              <div className="v">{health?.redis || "—"}</div>
-            </div>
-            <div className="metric">
-              <div className="k">WS clients</div>
-              <div className="v">{health?.websocket_clients ?? "—"}</div>
-            </div>
-            <div className="metric">
-              <div className="k">Tokens</div>
-              <div className="v">{health?.tokens_monitored ?? "—"}</div>
+              );
+            })}
+            <div className="rounded-xl border border-[var(--border)] bg-black/20 p-3">
+              <div className="text-xs text-slate-500">Tracked</div>
+              <div className="mt-1 font-mono text-sm">{movers.length || 0}</div>
+              <div className="text-xs text-slate-400">fast-mover rows</div>
             </div>
           </div>
-          {!!health?.degraded_components?.length && (
-            <p className="muted">Degraded: {health.degraded_components.join(", ")}</p>
-          )}
-        </section>
-      </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-      <p className="disclaimer">
-        Scenario rows are explicitly labeled <span className="mono">mock.scenario</span> and are not live
-        chain data. Axiom has no documented public developer API as of research; use Copy CA + Pulse.
-        Never share seed phrases. Not financial advice.
-      </p>
-    </main>
+function EmptyLive({ note }: { note: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-sm text-slate-400">
+      {note}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="skeleton h-16" />
+        <div className="skeleton h-16" />
+        <div className="skeleton h-16" />
+      </div>
+    </div>
   );
 }

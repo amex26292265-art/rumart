@@ -86,7 +86,21 @@ Endpoint: `GET https://api.jup.ag/price/v3?ids={comma_separated_mints}` (max 50 
 
 ---
 
-## 5. PumpPortal (Pump.fun data stream)
+## 5b. Bybit Spot (public)
+
+| Field | Value |
+| --- | --- |
+| Purpose | CEX Spot opportunity scanner: instruments, tickers, fast movers, early-move phases |
+| Official docs | https://bybit-exchange.github.io/docs/v5/market/instrument · https://bybit-exchange.github.io/docs/v5/websocket/public/ticker |
+| Authentication | None for public market REST/WS |
+| REST | `GET /v5/market/instruments-info?category=spot`, `GET /v5/market/tickers?category=spot` |
+| WebSocket | `wss://stream.bybit.com/v5/public/spot` topic `tickers.{symbol}` |
+| Rate limits | See Bybit docs; public WS arg limits (Spot ≤10 args per subscribe message) |
+| Cost | Free public market data |
+| Fallback discovery | CoinGecko `exchanges/bybit_spot/tickers` when Bybit REST is geo-blocked (documented; provenance labeled) |
+| Note | Some cloud regions receive HTTP 403 from Bybit CloudFront REST while WS still works |
+
+---
 
 | Field | Value |
 | --- | --- |

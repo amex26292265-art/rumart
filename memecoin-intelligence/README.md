@@ -1,77 +1,40 @@
-# MEMECOIN INTELLIGENCE
+# MEMECOIN INTELLIGENCE V2
 
-Local decision-support system for discovering and analyzing very new Solana memecoins.
+Professional local decision-support terminal for Solana memecoins + **Bybit Spot** scanning.
 
-**Paper trading only.** Never invents data. Never claims certainty. Live execution is not included.
-
-This application lives under `memecoin-intelligence/` inside the repository (alongside the existing Rumart marketplace; the two are independent).
+**Paper trading only.** Never invents data. Never claims certainty.
 
 ## Quick start
 
 ```bash
 cd memecoin-intelligence
 cp .env.example .env
-docker compose up --build
+# backend
+cd backend && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+# frontend (other terminal)
+cd frontend && npm install && npm run dev
 ```
 
 - Dashboard: http://localhost:3001
-- API docs: http://localhost:8000/docs
-- Health: http://localhost:8000/health
+- API: http://localhost:8000/docs
 
-Without Docker (API only):
+Or: `docker compose up --build`
 
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
+## V2 highlights
 
-Frontend:
+- Rebuilt dark trading-terminal UI (sidebar, top bar, KPI cards, opportunity rows, radar/charts)
+- Clickable status explainers (CONSIDER ENTRY / DO NOT CHASE / etc.)
+- Live **Bybit Spot** public WebSocket scanner (no API secret)
+- Fast Movers ranked by short-horizon acceleration (not 24h % alone)
+- Opportunity score **separate** from Entry Quality + Chase Risk
+- Production dashboard disables mock scenario tokens (`SEED_DEMO_SCENARIOS=false`)
 
-```bash
-cd frontend
-pnpm install
-pnpm dev
-```
+## Bybit note
 
-## Documentation
+Official REST (`api.bybit.com`) can be geo-blocked in some cloud regions (HTTP 403) while public WebSocket still works. In that case discovery falls back to documented CoinGecko `bybit_spot` exchange tickers, then prices stream from Bybit WS. Provenance is labeled.
 
-| Doc | Path |
-| --- | --- |
-| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Data sources | [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) |
-| Scoring | [docs/SCORING.md](docs/SCORING.md) |
-| Risk model | [docs/RISK_MODEL.md](docs/RISK_MODEL.md) |
-| Roadmap | [docs/ROADMAP.md](docs/ROADMAP.md) |
+## Docs
 
-## Folder structure
-
-```
-memecoin-intelligence/
-├── docs/
-├── backend/app/{api,core,db,domain,engines,providers,services,workers}
-├── backend/tests/
-├── frontend/src/{app,components,hooks,lib}
-├── scripts/
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
-
-## Phase 1 status
-
-- Architecture + provider interfaces
-- PostgreSQL models + Redis wiring
-- Deterministic risk / score / decision / paper engines
-- Dark dashboard shell with WebSocket live updates
-- Scenario fixtures labeled as `mock.scenario` (never presented as live chain data)
-
-Live discovery, wallet graph, social/news NLP, and ML training arrive in later phases (see ROADMAP).
-
-## Non-negotiables
-
-- No seed phrases / private keys
-- No automatic real-money trades
-- No undocumented Axiom API
-- Missing/stale data → INSUFFICIENT / STALE / UNKNOWN
+See `docs/` for architecture, data sources, scoring, risk, and roadmap.

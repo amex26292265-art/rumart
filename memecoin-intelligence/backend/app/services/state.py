@@ -16,6 +16,7 @@ from app.providers.disabled import (
     DisabledWalletProvider,
     TemplateLLMProvider,
 )
+from app.providers.bybit import bybit_service
 from app.services.scenarios import build_scenarios, narrative_scenarios
 
 
@@ -35,6 +36,7 @@ class AppState:
         self.events_per_minute: float = 0.0
         self.db_ok: bool | None = None
         self.redis_ok: bool | None = None
+        self.bybit = bybit_service
         self.providers = {
             "market": DisabledMarketDataProvider(),
             "onchain": DisabledOnChainProvider(),
@@ -43,13 +45,20 @@ class AppState:
             "news": DisabledNewsProvider(),
             "wallet": DisabledWalletProvider(),
             "llm": TemplateLLMProvider(),
+            "bybit": bybit_service,
         }
         self._lock = asyncio.Lock()
+        self.signal_history: list[dict[str, Any]] = []
+        self.watchlist: set[str] = set()
+        self.alerts: list[dict[str, Any]] = []
 
     def load_scenarios(self) -> None:
         if self.settings.seed_demo_scenarios:
             self.tokens = build_scenarios()
             self.narratives = narrative_scenarios()
+        else:
+            self.tokens = []
+            self.narratives = []
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         dead = []
